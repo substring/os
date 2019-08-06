@@ -1,0 +1,3443 @@
+#!/bin/bash
+depend_procedure core base # esp for auto_network, intro and set_clock workers
+VERSION=160
+
+CONFIG_DIR=/home/arcade/.config/
+CONFIG_FILE=${CONFIG_DIR}/ga.conf
+CONFIG_FILE_TMP=${CONFIG_DIR}/ga.tmp
+
+# Auto Partition
+RAN_AUTOPART=no
+AUTO_DRIVE=NONE
+
+# Drives
+INSTALL_DRIVE=
+BOOT_DRIVE=
+ROOT_DRIVE=
+HOME_DRIVE=
+SWAP_DRIVE=
+ROMS_DRIVE=
+
+# Setup Options
+NETWORK_SETUP=0
+AUDIO_SETUP=0
+SYSTEM_SETUP=0
+VIDEO_SETUP=0
+
+# This is a port of the original /arch/setup script.  It doesn't use aif phases but uses it's own menu-based flow (phase) control
+
+BLOCK_ROLLBACK_USELESS=1
+
+DOING_INSTALL=0
+
+# clock
+HARDWARECLOCK=
+TIMEZONE=
+
+PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
+	  
+start_process ()
+{
+	#####################
+	## begin execution ##
+				##execute worker intro
+
+	if [ ! -d "$CONFIG_DIR" ]; then
+		mkdir -p $CONFIG_DIR
+		touch $CONFIG_FILE
+		chown arcade.nobody $CONFIG_FILE
+	fi
+	
+	execute worker configure
+	
+	if [ -d "/home/roms" ]; then
+		MYTTY=$(tty)
+		if [ "$MYTTY" = "/dev/tty1" ]; then
+			if [ ! -f "/root/.setup_done" ]; then
+				touch /root/.setup_done
+				sudo systemctl stop devmon@arcade.service 
+				sudo umount /media/* > /dev/tty12 2>&1
+
+				check_for_home
+
+				if [ ! -f "/home/arcade/1" ]; then
+						inform "Previous installation found, using it"
+						previous_setup
+						sudo systemctl start devmon@arcade.service 
+						worker_start_x
+				fi
+				sudo systemctl start devmon@arcade.service
+				execute worker intro
+			fi
+		fi
+	fi
+		
+	if [ -f "/home/arcade/1" ]; then
+		amixer sset -c 0 PCM 200 unmute 2>&1 0>&1 >/dev/null
+		amixer sset -c 0 Master 100% unmute 2>&1 0>&1 >/dev/null
+		amixer sset -c 0 Front 100% unmute 2>&1 0>&1 >/dev/null
+	fi
+
+	default=1
+	while true
+	do
+    		mainmenu
+	done
+}
+
+check_for_home()
+{
+	if [ ! -d "/mnt/gahome" ]; then
+        	mkdir /mnt/gahome
+	fi
+
+	DRIVES=$(fdisk -l |grep ^/dev/|grep "83 Linux"|sed -e s/\*//g|awk '{printf("%s ", $1)}')
+	FOUNDHOME=0
+	HOMEDRIVE=
+	for partition in $DRIVES
+	do
+  		ISMNT=$(grep $partition /etc/mtab)
+  		if [ "$ISMNT" = "" ]; then
+        		inform "Checking $partition for home directory"
+				sudo umount $partition > /dev/tty12 2>&1
+        		mount $partition /mnt/gahome
+        		if [ -f "/mnt/gahome/.config/ga.conf" ]; then
+                		FOUNDHOME=1
+                		HOMEDRIVE=$partition
+        		fi
+        		umount /mnt/gahome
+  		fi
+	done;
+
+	if [ "$HOMEDRIVE" != "" ]; then
+			PREV=yes
+        	inform "Found home partition $HOMEDRIVE"
+        	sleep 2
+			ask_yesno "Previous installation found. Do you want to use?" || PREV=no
+					if [ "${PREV}" = "yes" ]; then
+						sudo umount $HOMEDRIVE > /dev/tty12 2>&1
+						mount $HOMEDRIVE /home/arcade
+						HOME_DRIVE=$HOMEDRIVE
+						else
+						sudo umount $HOMEDRIVE > /dev/tty12 2>&1
+						HOME_DRIVE=""
+					fi
+        	
+			
+	fi
+	return 0
+}
+
+mainmenu()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Main Menu" "Setup Groovy Arcade Linux" required \
+			1 "Start Front-End / Window Manager" \
+			2 "Setup (video, audio, network, etc.)" \
+			3 "HD Installation and Partition Tools" \
+			4 "File Manager (MC)" \
+			5 "Shutdown / Reboot" \
+			6 "Exit to Shell" || ANSWER_OPTION=8
+		case $ANSWER_OPTION in 
+			"1")            execute worker start_x && default=1 ;;
+			"2")			execute worker setup_menu && default=1 ;;
+			"3")            execute worker installpartition && default=1 ;;
+			"4") 	        execute worker file_manager && default=4 ;;
+			"5") 	        execute worker power_menu && default=5 ;;
+			"6")            execute worker msg_report ;;
+			*)              execute worker abort_installer;;
+		esac
+	done
+
+	return 0;
+}
+
+worker_installpartition()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "HD Installation and Partition Tools" "Setup Groovy Arcade Linux" required \
+			1 "Choose Partitions (home, roms, swap)" \
+			2 "Hard Drive Installation" \
+			3 "Partition Manager (CAUTION!)" \
+			4 "Return to Main" || return
+		case $ANSWER_OPTION in 
+			"1")		execute worker livecd_menu && default=2;;
+			"2")		execute worker select_install && default=3 ;;
+			"3") 	    execute worker partition_disks && default=4 ;;
+			"4")		return 0 ;;
+			*)  		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0;
+}
+
+worker_livecd_menu()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Choose Partitions (home, swap, roms)" "Choose Partitions" required \
+			1 "Choose partition as home/arcade" \
+            2 "Choose partition as swap drive" \
+			3 "Choose partition as ROM/Snap drive" \
+                        4 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")            execute worker select_home       && default=2 ;;
+			"2")            execute worker select_swap       && default=3 ;;
+			"3")            execute worker select_roms 	 && default=4 ;;
+			"4")		return 0 ;;
+			*) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0
+}
+
+worker_setup_menu()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Setup (video, audio, network, etc.)" "System Settings" required \
+			1 "Video Setup" \
+			2 "Audio Setup" \
+			3 "Network Setup" \
+			4 "Joystick Setup" \
+			5 "Front-End / Window Manager" \
+			6 "Add ROM Path" \
+			7 "Add Snap Path" \
+			8 "System Update" \
+			9 "System Setup" \
+			10 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")            execute worker video_menu       && default=2 ;;
+			"2")            execute worker audio_menu 	&& default=3 ;;
+			"3")            execute worker network_menu 	&& default=4 ;;
+			"4")			execute worker joystick_menu    && default=5 ;;
+			"5")            execute worker select_frontend  && default=6 ;;
+            "6")            execute worker MakeRSCache roms  && default=7 ;;
+			"7")            execute worker MakeRSCache snaps && default=8 ;;
+			"8")			execute worker extras_menu      && default=9 ;;
+            "9")            execute worker system_menu      && default=10;;
+			"10")		return 0 ;;
+			*) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0
+}
+
+worker_system_menu()
+{
+	local default=no
+	SYSTEM_SETUP=1
+	while [ 0 = 0 ]; do
+		ask_option $default "Configuration Menu" "System Configuration" required \
+			1 "Password" \
+            2 "Language/Keyboard" \
+            3 "SwitchRes manual settings" \
+            4 "GroovyMAME manual settings" \
+			5 "AdvanceMenuPlus manual settings" \
+            6 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")		execute worker select_passwd && default=2 ;;
+            "2")            execute worker select_language_menu && default=3 ;;
+			"3")		execute worker edit_switchres && default=4 ;;
+            "4")            execute worker edit_mame && default=5 ;;
+            "5")            execute worker edit_advmenu && default=6 ;;
+            "6")		return 0 ;;
+			*) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+	return 0;
+}
+
+worker_edit_switchres ()
+{
+	nano -R /home/arcade/switchres.conf
+	return 0
+}
+
+worker_edit_mame()
+{
+	nano -R /home/arcade/mame.ini
+}
+
+worker_edit_advmenu()
+{
+	nano -R /home/arcade/.advance/advmenup.rc
+}
+
+worker_select_language_menu()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Language Menu" "Setup Language/Keyboard" required \
+			1 "Locale" \
+			2 "Keyboard" \
+			3 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")		execute worker select_locale && default=2;;
+			"2")		execute worker select_keyboard && default=3 ;;
+			"3")		return 0 ;;
+			*) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0;
+}
+
+worker_select_locale() 
+{
+	# /usr/share/i18n/SUPPORTED
+	if [ -f "/home/arcade/1" ]; then
+		notify "You can only change the language on an installed system. Not in the LiveCD"
+		return 1
+	fi
+	notify "See /usr/share/i18n/SUPPORTED for supported locales"
+	nano -R /etc/locale.gen
+	nano -R /etc/locale.conf
+	inform "Generating new locales You will need to reboot for the changes to take effect."
+	LOCALE=$(cat /etc/locale.conf|sed -e "s/#.*//g")
+	localectl set-locale $LOCALE
+	locale-gen -a
+	#notify "You will need to set LANG or LOCALE environment variables in ~/.bash_profile"
+	return 0
+}
+
+worker_select_keyboard() 
+{
+	CURKEYMAP=$(cat /etc/vconsole.conf | grep KEYMAP= | sed -e 's/KEYMAP=//g' | sed -e 's/\=//g')
+	
+	ask_string "Set keymap:" "$CURKEYMAP" || return 1
+		
+		KEYMAP=${ANSWER_STRING// /}
+
+	cat $CONFIG_FILE | sed -e 's/keymap=.*//g'| grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "keymap=$KEYMAP" >> $CONFIG_FILE
+	##sed -ri "s/^KEYMAP=.*/KEYMAP=$KEYMAP/" /etc/vconsole.conf
+		ask_yesno "Change current keymap from $CURKEYMAP to $KEYMAP? $keymaplocale" || return 1
+			rm /tmp/keymaps
+			cat /etc/vconsole.conf|grep KEYMAP= >> /tmp/keymaps
+			cp -f /tmp/keymaps $CONFIG_DIR
+			chown arcade.nobody "$CONFIG_DIR" keymaps
+			#localectl set-keymap $CURKEYMAP
+			localectl set-keymap $KEYMAP
+			KM=$(localectl)
+			inform "$KM"
+			sleep 5
+	return 0
+}
+
+worker_file_manager()
+{
+	mc
+}
+
+worker_start_x()
+{
+	# Setup X Windows
+	if [ ! -f "/etc/X11/xorg.conf" ]; then
+		notify "video monitor setup"
+		worker_select_monitor_menu
+	fi
+	
+	LX=$(grep 'startlxde' /home/arcade/.xinitrc)
+	if [ "$LX" != "" ]; then
+	su arcade -c startx -- vt7
+	else	
+	su arcade -c startx -- -nocursor vt7
+	fi
+
+}
+
+worker_power_menu()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Power Menu" "Shutdown/Restart System" required \
+			1 "Reboot" \
+			2 "Shutdown" \
+			3 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")		execute worker reboot && default=3 ;;
+			"2")		execute worker shutdown && default=3 ;;
+			"3")		return 0 ;;
+			*) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0;
+}
+
+worker_reboot()
+{
+	ask_yesno "Really Reboot System?" || return 
+	reboot
+	inform "Restarting System"
+	sleep 120
+	notify "Restarting failed!"
+	return 0
+}
+
+worker_shutdown()
+{
+	ask_yesno "Really Shutdown System?" || return
+	poweroff
+	inform "Shutting Down System"
+	sleep 120
+	notify "Shutdown failed!"
+	return 0
+}
+
+previous_setup()
+{
+	# Data directory setup
+	DATACFG=$(grep data= $CONFIG_FILE)
+	DATAVALUE=$(echo $DATACFG | awk -F = '{print $2}')
+	if [ "$DATAVALUE" != "" ]; then
+		sudo umount $DATAVALUE > /dev/tty12 2>&1
+		mount $DATAVALUE /home/roms
+	fi
+	# Swapfile setup
+	SWAPCFG=$(grep swap= $CONFIG_FILE)
+	SWAPVALUE=$(echo $SWAPCFG | awk -F = '{print $2}')
+	if [ "$SWAPVALUE" != "" ]; then
+		swapon $SWAPVALUE
+	fi
+	# Audio Setup
+	VOLCFG=$(grep volume= $CONFIG_FILE)
+	VOLVALUE=$(echo $VOLCFG | awk -F = '{print $2}')
+	IS_ALSA=$(cat $CONFIG_FILE | grep alsa=)
+
+	if [ "$VOLVALUE" != "" ]; then
+		if [ "$IS_ALSA" = "" ]; then
+			amixer sset -c $audiodev PCM 200 unmute 2>&1 0>&1 >/dev/null
+        		amixer sset -c $audiodev Master 100% unmute 2>&1 0>&1 >/dev/null
+        		amixer sset -c $audiodev Front 100% unmute 2>&1 0>&1 >/dev/null
+        		alsactl store $audiodev 
+		else
+			audiodev=$(echo $IS_ALSA | awk -F = '{print $2}')
+			if [ "$audiodev" = "" ]; then
+				audiodev=0
+			fi
+        		amixer sset -c $audiodev PCM 200 unmute 2>&1 0>&1 >/dev/null
+        		amixer sset -c $audiodev Master ${VOLVALUE}% unmute 2>&1 0>&1 >/dev/null
+        		amixer sset -c $audiodev Front ${VOLVALUE}% unmute 2>&1 0>&1 >/dev/null
+        		alsactl store $audiodev
+		fi
+	fi
+	# Password setup
+	PASSCFG=$(grep passwd= $CONFIG_FILE)
+	PASSVALUE=$(echo $PASSCFG | awk -F = '{print $2}')
+	if [ "$PASSVALUE" != "" ]; then
+		echo arcade:$PASSVALUE | chpasswd
+		echo root:$PASSVALUE | chpasswd
+		#/opt/webmin/changepass.pl /etc/webmin admin $PASSVALUE
+	fi
+	# Network setup
+	###############if [ -f "$CONFIG_DIR/net" ]; then
+		###########cp -f $CONFIG_DIR/net /etc/conf.d/
+	###############fi
+	###############if [ -f "$CONFIG_DIR/wpa_supplicant.conf" ]; then
+		###########cp -f $CONFIG_DIR/wpa_supplicant.conf /etc/wpa_supplicant/
+	###############fi
+	###############NETCFG=$(grep network= $CONFIG_FILE)
+	###############NETVALUE=$(echo $NETCFG | awk -F = '{print $2}')
+	###############if [ "$NETVALUE" != "" ]; then
+		###########ln -s /etc/init.d/net.lo /etc/init.d/net.${NETVALUE}
+		###########rc-update add net.${NETVALUE} default
+		###########/etc/init.d/net.${NETVALUE} start
+		###########/etc/init.d/sshd restart
+	###############fi
+	# X Windows
+	if [ -f "$CONFIG_DIR/xorg.conf" ]; then
+		cp -f $CONFIG_DIR/xorg.conf /etc/X11/
+	fi
+	# keymap
+	if [ -f "$CONFIG_DIR/keymaps" ]; then
+		CURKEYMAP=$(cat /etc/vconsole.conf | grep KEYMAP= | sed -e 's/KEYMAP=//g' | sed -e 's/\=//g')
+		##cp -f $CONFIG_DIR/keymaps /etc/vconsole.conf
+		localectl set-keymap $CURKEYMAP
+	fi
+	return 0
+}
+
+worker_install_menu()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Installation Menu" "Install Groovy Arcade Linux" required \
+			1 "Install to Disk" \
+			2 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")		execute worker select_install && default=2 ;;
+			"2")		return 0 ;;
+			*) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0
+}
+
+worker_auto_partition()
+{
+	local default=no
+	sudo systemctl stop devmon@arcade.service 
+	sudo umount /media/* > /dev/tty12 2>&1
+	DEVICE=
+	DISKS=$(fdisk -l | grep ^Disk\ / | sed -e 's/://g' | sed -e 's/,//g' | awk '{printf("%s %s%s\n", $2, $3, $4)}')
+	if [ "$DISKS" = "" ]; then
+		notify "No drives available to partition"
+		return 0
+	fi
+	while [ 0 = 0 ]; do
+        	ask_option $default "Automatically Partition" "Choose a drive to auto-partition" required $DISKS \
+			"Done" "-" || return 1
+
+		if [ "$ANSWER_OPTION" = "Done" ]; then
+			return 0
+		fi
+
+		DOIT=yes
+		ask_yesno "Really auto-partition $ANSWER_OPTION drive?\nWarning! All data will be erased!!!" || DOIT=no
+		if [ "$DOIT" == "yes" ]; then
+			inform "Autopartitioning $ANSWER_OPTION..."
+			DEVICE="$ANSWER_OPTION"
+			CHECK=$(fdisk -l $DEVICE|grep ${DEVICE}1)
+			if [ "$CHECK" != "" ]; then
+				notify "Error, $DEVICE drive is already partitioned!!!"
+			else
+				BYTES=$(fdisk -l |grep $DEVICE |grep ^Disk|awk '{print $5}')
+
+				KBYTES=$(expr $BYTES / 1000)
+				MBYTES=$(expr $KBYTES / 1000)
+				GBYTES=$(expr $MBYTES / 1000)
+				TBYTES=$(expr $GBYTES / 1000)
+
+				TOTAL=$MBYTES
+				DISKSIZE=$TOTAL
+
+				BOOT=400
+				SWAP=2000
+
+				if [ $TOTAL -lt 4000 ]; then
+					notify "There is not enough room on disk, needs at least 4 Gig"
+					return 1
+				elif [ $TOTAL -lt 8000 ]; then
+					inform "Total is less than 8 Gig"
+                                	SWAP=500
+				elif [ $TOTAL -lt 16000 ]; then
+					inform "Total is less than 16 Gig"
+                                	SWAP=1000
+				elif [ $TOTAL -lt 32000 ]; then
+					inform "Total is less than 32 Gig"
+				elif [ $TOTAL -lt 64000 ]; then
+					inform "Total is less than 64 Gig"
+				fi
+
+				TOTAL=$(expr $TOTAL - $BOOT)
+				TOTAL=$(expr $TOTAL - $SWAP)
+
+				BOOTNUM=1
+				SWAPNUM=2
+				ROOTNUM=3
+
+## FDISK AUTO PARTITION START
+	echo "
+n
+p
+${BOOTNUM}
+
++${BOOT}M
+n
+p
+${SWAPNUM}
+
++${SWAP}M
+t
+2
+82
+n
+p
+${ROOTNUM}
+
+
+a
+1
+w
+q
+" | fdisk $DEVICE
+## FDISK AUTO PARTITION END
+				if [ $? -eq 0 ]; then
+					OK=1
+					inform "Partitioning Successful"
+				else
+					notify "Partitioning Error!!!"
+					return 1
+				fi
+				## Setup swap space
+				cat $CONFIG_FILE | sed -e 's/swap=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+				mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+				echo "swap=${DEVICE}${SWAPNUM}" >> $CONFIG_FILE
+
+				inform "Creating swap space on ${DEVICE}1 partition..."
+				mkswap -L SwapSpace ${DEVICE}${SWAPNUM}
+				inform "Starting swap space..."
+				swapon ${DEVICE}${SWAPNUM}
+				SWAP_DRIVE=${DEVICE}${SWAPNUM}
+
+				inform "Formatting ${DEVICE}${BOOTNUM} partition for /boot"
+				mkfs.ext2 -F -q ${DEVICE}${BOOTNUM}
+				e2label ${DEVICE}${BOOTNUM} GAboot
+				BOOT_DRIVE=${DEVICE}${BOOTNUM}
+
+				inform "Formatting ${DEVICE}${ROOTNUM} partition for /"
+				mkfs.ext4 -F -O ^64bit -q ${DEVICE}${ROOTNUM}
+				e2label ${DEVICE}${ROOTNUM} GA
+				INSTALL_DRIVE=${DEVICE}${ROOTNUM}
+				ROOT_DRIVE=$INSTALL_DRIVE
+
+				if [ ! -d "/groovyarcade" ]; then
+					mkdir /groovyarcade
+				fi
+				mount ${DEVICE}${ROOTNUM} /groovyarcade/
+
+				if [ ! -d "/groovyarcade/boot" ]; then
+					mkdir /groovyarcade/boot
+				fi
+				mount ${DEVICE}${BOOTNUM} /groovyarcade/boot
+
+				if [ ! -d "/groovyarcade/home/roms" ]; then
+					mkdir -p /groovyarcade/home/roms
+				fi
+
+				RAN_AUTOPART=yes
+				AUTO_DRIVE=$DEVICE
+				if [ "$DOING_INSTALL" = "0" ]; then
+					notify "Partitions created and setup for Install"
+				fi
+				return 0
+			fi
+		fi
+	done
+	return 0
+}
+
+worker_select_install()
+{
+	if [ ! -d "/run/archiso/" ]; then
+		notify "You aren't booting from a LiveCD so can't install."
+		return 1
+	fi
+
+	if [ -d "/groovyarcade/etc" ]; then
+		notify "You have already installed, cannot do it twice!!!"
+		return 1
+	fi
+	ask_yesno "Install to disk?" || return 1
+	DOING_INSTALL=1
+	sudo systemctl stop devmon@arcade.service 
+	sudo umount /media/* > /dev/tty12 2>&1
+	SETUP=1
+	if [ "$NETWORK_SETUP" = "0" ]; then
+		ask_yesno "Do you want to setup Networking" || SETUP=0
+		if [ "$SETUP" = "1" ]; then
+			worker_network_menu
+		fi
+	fi
+	SETUP=1
+	if [ "$AUDIO_SETUP" = "0" ]; then
+		ask_yesno "Do you want to setup Audio" || SETUP=0
+		if [ "$SETUP" = "1" ]; then
+			worker_audio_menu
+		fi
+	fi
+	SETUP=1
+	if [ "$VIDEO_SETUP" = "0" ]; then
+		ask_yesno "Do you want to setup Video" || SETUP=0
+		if [ "$SETUP" = "1" ]; then
+			worker_video_menu
+		fi
+	fi
+	# Setup X Windows
+	COUNT=0
+	while [ ! -f "/etc/X11/xorg.conf" ]; do
+		notify "You must setup the Video Monitor type"
+		worker_select_monitor_menu
+		COUNT=$(expr $COUNT + 1)
+		if [ "$COUNT" = "3" ]; then
+			notify "X Windows setup failed, you must setup a monitor type!"
+			return 1
+		fi
+	done	
+	SETUP=1;
+	if [ "$SYSTEM_SETUP" = "0" ]; then
+		ask_yesno "Do you want to setup System settings" || SETUP=0
+		if [ "$SETUP" = "1" ]; then
+			worker_system_menu
+		fi
+	fi
+
+	# Check for extra ROMs/Snaps drive
+	if [ -f "/home/roms/1" ]; then
+		HAVEROMS=yes
+		ask_yesno "Do you have a drive of ROMs/Snaps to mount as /home/roms?" || HAVEROMS=no
+		if [ "$HAVEROMS" = "yes" ]; then
+			worker_select_roms
+		fi
+	fi
+
+	if [ "$RAN_AUTOPART" = "no" ]; then
+		AUTOPART=1
+		ask_yesno "Do you want to Auto Partition an empty drive?" || AUTOPART=0
+
+		if [ "$AUTOPART" = "1" ]; then
+			worker_auto_partition 
+			if [ "$RAN_AUTOPART" = "no" ]; then
+				ask_yesno "Auto partition failed, do you want to continue installation?" || DOING_INSTALL=0 return 1
+			fi
+		fi
+	fi
+
+	if [ "$RAN_AUTOPART" = "no" ]; then
+		local default=no
+		DRIVES=$(fdisk -l |grep ^/dev/|grep "83 Linux"|grep -v $AUTO_DRIVE|sed -e s/\*//g|awk '{printf("%s %s\n", $1, $4)}')
+		if [ "$DRIVES" = "" ]; then
+			notify "No drives are available to use"
+			DOING_INSTALL=0
+			return 1
+		fi
+        	ask_option $default "Root Partition" "Choose a drive" required $DRIVES || DOING_INSTALL=0 return 1
+
+		if [ "$HOME_DRIVE" = "$ANSWER_OPTION" ]; then
+			notify "You cannot install to the same drive used for the Home drive"
+			DOING_INSTALL=0
+			return 1
+		fi
+
+		if [ "$ROMS_DRIVE" = "$ANSWER_OPTION" ]; then
+			notify "You cannot install to the same drive used for the Roms drive"
+			DOING_INSTALL=0
+			return 1
+		fi
+
+		INSTALL_DRIVE=$ANSWER_OPTION
+		BOOT_DRIVE=$ANSWER_OPTION
+
+		cat $CONFIG_FILE | sed -e 's/install=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+		mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+		echo "install=$INSTALL_DRIVE" >> $CONFIG_FILE
+
+		MOUNTED=$(grep $INSTALL_DRIVE /etc/mtab)
+		if [ "$MOUNTED" != "" ]; then
+			ask_yesno "$INSTALL_DRIVE is already mounted, umount and install?" || DOING_INSTALL=0 return
+			inform "Unmounting $INSTALL_DRIVE"
+			umount $INSTALL_DRIVE
+		fi
+
+		FORMAT=yes
+		ask_yesno "Mount and format $INSTALL_DRIVE drive?\nWarning! All data will be erased!!!" || FORMAT=no
+		if [ "$FORMAT" == "yes" ]; then
+			inform "Formatting $INSTALL_DRIVE partition..."
+			mkfs.ext4 -F -O ^64bit -q $INSTALL_DRIVE
+			e2label $INSTALL_DRIVE GA
+		else
+			ask_yesno "Did not format $INSTALL_DRIVE drive.\nContinue Install?" || DOING_INSTALL=0 return 1
+		fi
+
+		if [ ! -d "/groovyarcade" ]; then
+			mkdir /groovyarcade
+		fi
+		mount $INSTALL_DRIVE /groovyarcade
+		GRUBDIR=""
+	else
+		GRUBDIR=""
+		#GRUBDIR="--root-directory=/boot"
+	fi
+
+	# arcade user autostart X Windows
+	echo "export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:$PATH" > 		/home/arcade/.bash_profile
+	echo "MYTTY=\$(tty)" >> 				/home/arcade/.bash_profile
+	echo "if [ \"\$MYTTY\" = \"/dev/tty1\" ]; then" >> 	/home/arcade/.bash_profile
+	echo "    sudo setterm -powerdown 0 -powersave off -blank 0" >>	/home/arcade/.bash_profile
+	echo "    startx -- -nocursor &> /dev/tty12" >>				/home/arcade/.bash_profile
+	echo "    sudo gasetup" >> 				/home/arcade/.bash_profile
+	echo "fi" >> 						/home/arcade/.bash_profile
+
+	# Create mame.xml if not there already
+	if [ ! -f "/home/arcade/.advance/MAME.xml" ]; then
+		inform "Setting up MAME XML database"
+		groovymame -listxml > /home/arcade/.advance/MAME.xml
+		chown arcade.nobody /home/arcade/.advance/MAME.xml
+	fi
+
+	# Check if data/home are mounted and get partition type
+	DATATYPE=$(mount | grep '/home/roms '| awk '{print $5}')
+	HOMETYPE=$(mount | grep '/home/arcade '| awk '{print $5}')
+
+	# Unmount roms and arcade directories first
+	if [ ! -f "/home/arcade/1" ]; then
+		inform "Unmounting /home/arcade"
+		umount /home/arcade
+	fi
+	if [ ! -f "/home/roms/1" ]; then
+		inform "Unmounting /home/roms"
+		umount /home/roms
+	fi
+
+	# Copy data
+	inform "Copying Groovy Arcade Linux to $INSTALL_DRIVE drive..."
+	rsync -aAXH /* /groovyarcade --exclude={/proc,/sys,/tmp,/run,/mnt,/media,/groovyarcade}
+	mkdir /groovyarcade/{proc,sys,tmp,run,mnt,media}
+	rm -f /groovyarcade/home/arcade/1 /groovyarcade/home/roms/1
+	rm -Rf /groovyarcade/home/arcade/lost+found /groovyarcade/home/roms/lost+found
+	#rsync -caq /run --exclude='archiso' /groovyarcade/
+
+	# Find video output
+	VIDEO=""
+	INTEL=""
+	KERNELCMD=$(cat /proc/cmdline)
+        for karg in $KERNELCMD
+        do
+                IS_VIDEO=$(echo $karg | grep video=)
+		IS_INTEL=$(echo $karg | grep i915)
+                if [ "$IS_VIDEO" != "" ]; then
+                        if [ "$VIDEO" != "" ]; then
+				VIDEO="$VIDEO $karg"
+			else
+				VIDEO="$karg"
+			fi
+                fi
+		if [ "$IS_INTEL" != "" ]; then
+			if [ "$INTEL" != "" ]; then			
+			INTEL="$INTEL $karg"
+			else
+			INTEL="$karg"
+			fi
+		fi
+        done
+
+	
+	
+	# Setup grub.conf Syslinux.cfg
+	rm -f /groovyarcade/boot/syslinux/syslinux.cfg 
+	echo "default arch" > /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "timeout 0" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "prompt 0" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "#UI vesamenu.c32" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "menu title Groovy Arcade Linux" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "menu background GA.png" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	VMLINUZ="/boot/vmlinuz-linux-15khz"
+	INITRD="/boot/initramfs-linux-15khz.img"
+	if [ "$RAN_AUTOPART" = "yes" ]; then
+		VMLINUZ="../vmlinuz-linux-15khz"
+		INITRD="../initramfs-linux-15khz.img"
+	fi
+	echo "label arch" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "menu label GroovyArcade" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "linux $VMLINUZ" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "append root=/dev/disk/by-label/GA $INTEL rw quiet rd.udev.log-priority=3 splash vga=0x311 $VIDEO" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	echo "initrd $INITRD" >> /groovyarcade/boot/syslinux/syslinux.cfg
+	cp /run/archiso/bootmnt/arch/boot/syslinux/splash.png /groovyarcade/boot/syslinux/GA.png
+	# Create fstab
+	USEDATA=$(grep data= $CONFIG_FILE)
+	USEHOME=$(grep home= $CONFIG_FILE)
+	ROOTTYPE=$(mount | grep '/groovyarcade '| awk '{print $5}')
+	if [ "$RAN_AUTOPART" = "no" ]; then
+		echo "LABEL=GA		/               $ROOTTYPE            defaults			0 1" > /groovyarcade/etc/fstab
+		if [ "$USEHOME" != "" ]; then
+			DRIVE=$(echo $USEHOME | awk -F = '{print $2}')
+			if [ "$HOMETYPE" = "ext4" -o "$HOMETYPE" = "ext3" -o "$HOMETYPE" = "ext2" ]; then
+				e2label $DRIVE /home/arcade
+				echo "LABEL=/home/arcade /home/arcade   $HOMETYPE            defaults			0 1" >> /groovyarcade/etc/fstab
+			else
+				echo "$DRIVE /home/arcade   $HOMETYPE            defaults			0 1" >> /groovyarcade/etc/fstab
+			fi
+		fi
+	else
+		echo "LABEL=GA		/                   ext4            defaults			0 1" > /groovyarcade/etc/fstab
+		echo "LABEL=GAboot	/boot               ext2            defaults			0 1" >> /groovyarcade/etc/fstab
+		if [ "$USEHOME" != "" ]; then
+			DRIVE=$(echo $USEHOME | awk -F = '{print $2}')
+			if [ "$HOMETYPE" = "ext4" -o "$HOMETYPE" = "ext3" -o "$HOMETYPE" = "ext2" ]; then
+				e2label $DRIVE /home/arcade
+				echo "LABEL=/home/arcade /home/arcade   $HOMETYPE            defaults			0 1" >> /groovyarcade/etc/fstab
+			else
+				echo "$DRIVE /home/arcade   $HOMETYPE            defaults			0 1" >> /groovyarcade/etc/fstab
+			fi
+		fi
+	fi
+	if [ "$USEDATA" != "" ]; then
+		DRIVE=$(echo $USEDATA | awk -F = '{print $2}')
+		ROM_FSTYPE=$(fdisk -l | grep $DRIVE | awk '{print $7}')
+		if [ "$ROM_FSTYPE" != "Linux" ]; then
+			#EXTRA_MOUNT_OPTS=",uid=1000,gid=1000"
+			EXTRA_MOUNT_OPTS=",rw"
+		fi
+
+		if [ "$DATATYPE" = "ext4" -o "$DATATYPE" = "ext3" -o "$DATATYPE" = "ext2" ]; then
+			e2label $DRIVE /home/roms
+			echo "LABEL=/home/roms	/home/roms               $DATATYPE            defaults,rw			0 1" >> /groovyarcade/etc/fstab
+
+			# Copy default roms over if none exist
+			inform "Getting /home/roms/ mountpoint ready"
+			rm -rf /groovyarcade/home/roms/*
+			mount $DRIVE /groovyarcade/home/roms
+			if [ ! -d "/groovyarcade/home/roms/roms" ]; then
+				inform "Copying default roms and directories over to installation"
+				rsync -caq /home/roms/* /groovyarcade/home/roms/
+				rm -f /groovyarcade/home/roms/1
+			fi
+		else
+			echo "$DRIVE	/home/roms               auto            defaults${EXTRA_MOUNT_OPTS}		0 1" >> /groovyarcade/etc/fstab
+			#echo "$DRIVE	/home/roms               $DATATYPE            noatime${EXTRA_MOUNT_OPTS}		0 1" >> /groovyarcade/etc/fstab
+		fi
+	fi
+	
+	#SWAP_DRIVE=${DEVICE}${SWAPNUM}
+	if [ "$SWAP_DRIVE" != "" ]; then
+	echo "LABEL=SwapSpace	none		swap		sw			0 0" >> /groovyarcade/etc/fstab
+	fi
+	echo "" >> /groovyarcade/etc/fstab
+
+	mount -o bind /sys /groovyarcade/sys
+	mount -o bind /proc /groovyarcade/proc
+
+	# Get root drive name to use for Grub install
+	GRUB_DRIVE=$(echo $INSTALL_DRIVE|sed -e 's/.$//g')
+	cp -Rf /root/vmlinuz /groovyarcade/boot/vmlinuz-linux
+	inform "Entering new installation chroot to setup system"
+## CHROOT
+chroot /groovyarcade /bin/bash --login <<CHROOTED
+	cd /root/
+	locale-gen -a
+	syslinux-install_update -i -a -m
+	mkinitcpio -p linux-15khz
+
+
+
+CHROOTED
+#fix install usb
+## END CHROOT
+#	systemctl enable autologin@tty1.service
+	umount /groovyarcade/sys
+	umount /groovyarcade/proc
+	
+	ask_yesno "Installation finished, Do you want to reboot? (remove CDROM afterwards)" || DOING_INSTALL=0 return 0
+
+	# Reboot system
+	worker_reboot
+
+	DOING_INSTALL=0
+
+	return 0
+}
+
+worker_audio_menu()
+{
+	
+	local default=no
+	AUDIO_SETUP=1
+	while [ 0 = 0 ]; do
+		ask_option $default "Audio Setup Menu" "Setup Audio" required \
+			1 "Default Card" \
+			2 "Change Volume" \
+			3 "AlsaMixer" \
+			4 "Audio Latency MAME" \
+			5 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")		execute worker  default_card && default=2 ;;
+			"2")		execute worker  set_volume && default=3 ;;
+			"3")		execute worker alsamixer  && default=4 ;;
+			"4")		execute worker  audio_latency && default=5 ;;
+			"5")		return 0 ;;
+			*) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0;
+
+}
+
+worker_alsamixer()
+{
+	C_ALSA=$(cat $CONFIG_FILE | grep alsa= | awk -F = '{print $2}')
+	alsamixer -c $C_ALSA
+	alsactl store $C_ALSA
+	return 0
+}
+
+worker_default_card()
+{
+	audiodev=$(aplay -l |grep ^card|sed -e "s/],.*//g"|sed -e "s/^card //g"|sed -e "s/://g"| awk '{printf("%s %s-%s \n", $1,$3,$4,$5)}'|sed -e "s/[[]//g")	
+		ask_option $default "Select Sound Card" "Choose a Sound Card." required $audiodev || return 0
+			DEF=$ANSWER_OPTION
+			sed -ri "s/card.*/card $DEF/g" /home/arcade/.asoundrc
+			sed -ri "s/alsa=.*/alsa=$DEF/g" /home/arcade/.config/ga.conf
+	return 0
+	}
+	
+worker_audio_latency()
+{
+	PREV=$(grep -r 'audio_latency' /home/arcade/mame.ini | awk '{print $2}')
+		ask_string "Audio latency MAME\nDefault 2.0 , Max 2.0 Min 0" "$PREV" || return 0
+			LAT=${ANSWER_STRING// /}
+				sed -ri "s@^audio_latency.*@audio_latency                   $LAT@g" /home/arcade/mame.ini
+	return 0
+	}
+	
+worker_set_volume()
+{
+	IS_ALSA=$(cat $CONFIG_FILE | grep alsa=)
+	CURVOL=$(cat $CONFIG_FILE | grep volume= | awk -F = '{print $2}')
+       		ask_string "Audio Volume (0-100)" "$CURVOL" || return 1
+       		VOLUME=${ANSWER_STRING// /}
+
+		audiodev=$(echo $IS_ALSA | awk -F = '{print $2}')
+		if [ "$audiodev" = "" ]; then
+			audiodev=0
+		fi
+        	amixer sset -c $audiodev PCM 200 unmute 2>&1 0>&1 >/dev/null
+        	amixer sset -c $audiodev Master ${VOLUME}% unmute 2>&1 0>&1 >/dev/null
+        	amixer sset -c $audiodev Front ${VOLUME}% unmute 2>&1 0>&1 >/dev/null
+        	alsactl store $audiodev
+
+	cat $CONFIG_FILE | sed -e 's/volume=.*//g'| grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "volume=$VOLUME" >> $CONFIG_FILE
+	AUDIO_SETUP=1
+	
+	return 0
+}
+
+worker_set_alsa()
+{
+	IS_ALSA=$(cat $CONFIG_FILE | grep alsa=)
+	#if [ "$1" = "off" ]; then
+
+	#mv /etc/modprobe.d/alsa_blacklist.conf /etc/modprobe.d/alsa_blacklist.DISABLED
+	audiodev=$(aplay -l|grep ^card|grep Analog|head -1|awk '{print $2}'|sed -e s/://g)
+	if [ "$audiodev" = "" ]; then
+		audiodev=0
+	fi
+        # Unmute audio and set volumes sanely
+        amixer sset -c $audiodev PCM 200 unmute 2>&1 0>&1 >/dev/null
+        amixer sset -c $audiodev Master 100% unmute 2>&1 0>&1 >/dev/null
+        amixer sset -c $audiodev Front 100% unmute 2>&1 0>&1 >/dev/null
+        alsactl store $audiodev
+
+	cat $CONFIG_FILE | sed -e 's/alsa=.*//g'| grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "alsa=$audiodev" >> $CONFIG_FILE
+
+	return 0
+}
+
+worker_network_menu()
+{
+	local default=no
+	IFACES=$(ip link|grep BROADCAST|sed -e s/://g|awk '{printf("%s -\n", $2)}')
+	
+	while [ 0 = 0 ]; do
+		ask_option $default "Network Setup Menu" "Setup Network" required \
+			1 "Config Network" \
+			2 "Fix Network" \
+			3 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+			"1")		
+		ask_option $default "Setup Network Interface" "Choose an interface" required $IFACES "Cancel" "-" || return 1
+	if [ "$ANSWER_OPTION" = "Cancel" ]; then
+		#return 0
+		execute worker network_menu
+		return
+	fi
+	
+	cat $CONFIG_FILE | sed -e 's/network=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "network=$ANSWER_OPTION" >> $CONFIG_FILE
+	IFACE=$ANSWER_OPTION
+	sudo ifconfig $IFACE up
+	WIRED=yes
+	file=wired
+
+	ask_yesno "Is $IFACE a Wired Device?" || WIRED=no
+	if [ "${WIRED}" = "no" ]; then
+			 ask_option $default "Setup Network ESSID" "Choose an ESSID" required \
+				1 "Manual ESSID" \
+				2 "Search ESSID" || return
+										
+					if [ $ANSWER_OPTION = "1" ]; then
+						PREVSS=$(grep ssid= $CONFIG_FILE| awk -F = '{print $2}')
+							ask_string "Wireless SSID:" "$PREVSS" || return 1
+								#SSID=${ANSWER_STRING// /}
+								SSID=$ANSWER_STRING
+					else
+						sudo ifconfig $IFACE down up
+						LIST=$(iwlist $IFACE scanning|grep -i ESSI|sed -e s/ESSID://g|sed -e s/'"'//g|sed 's/^\s*//'|sed -e "s/ /+/g"|awk '{printf("%s -\n", $1)}')
+						
+							if [ "$LIST" = "" ]; then
+								inform "Wireless Not Found"
+								sleep 2
+								return 0
+							fi	
+							
+							ask_option $default "List Wireless ESSID" "Choose a Wireless" required $LIST || return 1
+								SSID=$(echo $ANSWER_OPTION |sed -e "s/+/ /g")
+					fi
+
+				PREVKEY=$(grep psk= $CONFIG_FILE| awk -F = '{print $2}')
+				ask_string "Wireless Key:" "$PREVKEY" || return 1
+					KEY=${ANSWER_STRING// /}
+			
+		ask_option $default "Wireless Security" "Select your Wireless Security" required \
+			1 "Open" \
+			2 "Wep" \
+			3 "Wpa" || return
+
+			case $ANSWER_OPTION in 
+				"1")		SECURI=none ;;
+				"2")		SECURI=wep ;;
+				"3")		SECURI=wpa ;;
+				esac
+		
+		cat $CONFIG_FILE | sed -e 's/ssid=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+		mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+		echo "ssid=$SSID" >> $CONFIG_FILE
+		cat $CONFIG_FILE | sed -e 's/psk=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+		mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+		echo "psk=$KEY" >> $CONFIG_FILE
+		execute worker disable_wiimote
+		file=wifi
+	fi
+	cat $CONFIG_FILE | sed -e 's/wireless=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "wireless=$WIRED" >> $CONFIG_FILE
+
+	#STATIC=yes
+	DINAMIC=yes
+	ask_yesno "Setup $IFACE with a dinamic IP?" || DINAMIC=no
+	if [ "${DINAMIC}" = "no" ]; then
+	       	ask_string "IP Address (192.168.0.1):" "" || return 1
+		IPADDRESS=${ANSWER_STRING// /}
+        	ask_string "Gateway IP:" "" || return 1
+		GATEWAY=${ANSWER_STRING// /}
+        	ask_string "DNS Server IP:" "" || return 1
+		DNSSERVER=${ANSWER_STRING// /}
+        	ask_string "DNS Domain:" "" || return 1
+		DNSDOMAIN=${ANSWER_STRING// /}
+		DNSSEARCH=$DNSDOMAIN
+	fi
+	
+		# Static IP
+	if [ "${DINAMIC}" = "no" ]; then
+			sed -ri "s/^IP=.*/IP=static/" /etc/netctl/$file
+			sed -ri "s/^Interface=.*/Interface=$IFACE/" /etc/netctl/$file
+		    sed -ri "s/^[#]*Address=.*/Address='${IPADDRESS}\/24\'/" /etc/netctl/$file
+			sed -ri "s/^[#]*Gateway='.*/Gateway='${GATEWAY}'/" /etc/netctl/$file
+			sed -ri "s/^[#]*DNS=.*/DNS=('${DNSSERVER}')/" /etc/netctl/$file
+	
+			sed -ri "s/^nameserver.*//" /etc/resolv.conf
+			sed -ri '/^$/d' /etc/resolv.conf
+			echo "nameserver ${DNSSERVER}" >> /etc/resolv.conf
+			echo "nameserver ${DNSDOMAIN}" >> /etc/resolv.conf
+
+		else	
+			sed -ri "s/^IP=.*/IP=dhcp/" /etc/netctl/$file
+			sed -ri "s/^Interface=.*/Interface=$IFACE/" /etc/netctl/$file
+			sed -ri "s/^Address=.*/Address=''/" /etc/netctl/$file
+			sed -ri "s/^Gateway='.*/Gateway=''/" /etc/netctl/$file
+			sed -ri "s/^[#]*DNS=.*/DNS=('8.8.8.8')/" /etc/netctl/$file
+			sed -ri "s/^nameserver.*//" /etc/resolv.conf
+			sed -ri '/^$/d' /etc/resolv.conf
+			
+		fi
+		
+		if [ "${WIRED}" = "no" ]; then
+		#	echo "modules=( \"wpa_supplicant\" )" >> /etc/conf.d/net
+		#	echo "wpa_supplicant_${IFACE}=\"-Dwext\"" >> /etc/conf.d/net
+			#cat /etc/wpa_supplicant.conf.origin \
+			#	|sed -e s/ssid=\"\"/ssid=\"${SSID}\"/g \
+			#	|sed -e s/psk=\"\"/psk=\"${KEY}\"/g \
+			#		> /etc/wpa_supplicant.conf
+
+			sed -ri "s/^[#]*ESSID='.*/ESSID='${SSID}'/" /etc/netctl/$file
+			sed -ri "s/^[#]*Security=.*/Security=${SECURI}/" /etc/netctl/$file
+			sed -ri "s/^[#]*Key='.*/Key='${KEY}'/" /etc/netctl/$file
+			sed -ri "s/^Connection=.*/Connection=wireless/" /etc/netctl/$file
+
+		#	cp -f /etc/wpa_supplicant/wpa_supplicant.conf $CONFIG_DIR/
+		else
+		
+			sed -ri "s/^ESSID='.*/#ESSID=''/" /etc/netctl/$file
+			sed -ri "s/^Security=.*/#Security=wpa/" /etc/netctl/$file
+			sed -ri "s/^Key='.*/#Key=''/" /etc/netctl/$file
+			sed -ri "s/^Connection=.*/Connection=ethernet/" /etc/netctl/$file
+		
+		fi
+
+	ask_yesno "Bring up $IFACE interface?" || return
+
+	ISUP=$(ifconfig | grep $IFACE)
+	if [ "${ISUP}" = "" ]; then
+		notify "Net Not Found"
+	else
+		#netctl reenable $file
+		#netctl stop-all
+		#systemctl restart netctl@static.service
+		if [ "${DINAMIC}" = "yes" -a "${WIRED}" = "no" ]; then
+			ifconfig $IFACE down
+			dhcpcd -x 2>>/dev/tty12
+			sleep 2
+		fi
+		if [ "${WIRED}" = "no" ]; then
+			netctl stop $file
+			systemctl stop netctl@wifi.service
+			netctl disable $file 2>>/dev/tty12
+			dhcpcd -x 2>>/dev/tty12
+			ifconfig $IFACE down
+		fi
+		netctl restart $file
+		ifconfig $IFACE up 
+		systemctl restart sshd.service
+		systemctl restart smb.service nmb.service
+		netctl enable $file 2>>/dev/tty12
+		ips=$(ifconfig $IFACE | grep -oiE '([0-9]{1,3}\.){3}[0-9]{1,3}' | grep -v 255 |grep -v 127.0.0.1)
+		gate=$(ip route show | grep -oiE '([0-9]{1,3}\.){3}[0-9]{1,3}' -m 1)
+		dnes=$(cat /etc/resolv.conf |grep -oiE '([0-9]{1,3}\.){3}[0-9]{1,3}')
+		notify "Interface ${IFACE} is already running.\n\nIP ${ips}\nGW $gate\nDNS $dnes\n\n"
+
+	fi
+	NETWORK_SETUP=1
+	return 0 ;;
+			"2")	execute worker fix_network && default=3 ;;
+			"3")    return 0 ;;
+			  *)    notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+	
+	
+        
+}
+worker_fix_network()
+{
+	local default=no
+	VIDEO_SETUP=1
+        while [ 0 = 0 ]; do
+                ask_option $default "Video Setup Menu" "Setup video" required \
+                        1 "Default Network" \
+                        2 "Enable Or Disable Wiimote" \
+                        3 "Time Out DHCP" \
+						4 "Return to Main" || return
+
+                case $ANSWER_OPTION in
+                    "1")    
+			    netctl stop-all
+						systemctl stop netctl@wifi.service netctl@wire.service
+						systemctl disable netctl@wifi.service netctl@wire.service
+						dhcpcd -x 2>>/dev/tty12
+						netctl disable wifi
+						netctl disable wired
+						sudo rm /etc/netctl/{wifi,wired}
+                        sudo touch /etc/netctl/{wifi,wired}
+                        sudo chown arcade:users /etc/netctl/{wifi,wired}
+			
+                        sudo echo "Description='A basic static ethernet connection'
+Connection=ethernet
+Interface=eth0
+IP=static
+Address=('192.168.1.69/24')
+#Routes=('192.168.0.0/24 via 192.168.1.2')
+Gateway='192.168.1.1'
+DNS=('8.8.8.8')
+SkipNoCarrier=yes
+ForceConnect=yes" >> /etc/netctl/wired 2>>/dev/tty12
+						
+						sudo echo "Description='A basic static wireless connection'
+Connection=wireless
+Interface=wlan0
+Security=none
+IP=static
+ESSID='MyNetwork'
+Key=''
+Address='192.168.1.70/24'
+Gateway='192.168.1.1'
+DNS=('8.8.8.8')
+ForceConnect=yes" >> /etc/netctl/wifi 2>>/dev/tty12	
+						
+						notify "Now Your Network Config Is Default\n\n\n"
+												
+						default=2 ;;
+                   "2") execute worker disable_wiimote && default=3 ;;
+                   "3") 
+						TOUT=$(grep "^[#]*DefaultTimeoutStartSec=" /etc/systemd/system.conf | awk -F = '{print $2}')
+						ask_string "Time Out DHCP (0s-90s)" "$TOUT" || return 1
+						OUTT=${ANSWER_STRING// /}
+						sed -ri "s/^[#]*DefaultTimeoutStartSec=.*/DefaultTimeoutStartSec=$OUTT/" /etc/systemd/system.conf
+						default=4 ;;
+                   "4")            return 0 ;;
+                     *)              notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+        done	
+	return 0;
+}
+
+worker_select_passwd()
+{
+	PASSWD=1
+	PASSWD2=2
+	notify "Choose a password for the Root and Arcade users."
+	while [ "$PASSWD" != "$PASSWD2" ] ; do
+        	ask_string "Arcade Password:" "" || return 1
+        	PASSWD=${ANSWER_STRING// /}
+        	ask_string "Confirm Password:" "" || return 1
+        	PASSWD2=${ANSWER_STRING// /}
+		if [ "$PASSWD" != "$PASSWD2" ] ; then
+			notify "Passwords do not match! Try again."
+		fi
+	done
+
+	cat $CONFIG_FILE | sed -e 's/passwd=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "passwd=$PASSWD" >> $CONFIG_FILE
+
+	ask_yesno "Set root and arcade users password to $PASSWD?" || return
+	inform "Setting password for arcade and root users..."
+
+	echo arcade:$PASSWD | chpasswd
+	echo root:$PASSWD | chpasswd
+	/usr/local/bin/changepass.pl /etc/webmin admin $PASSWD
+
+	return 0;
+}
+
+worker_partition_disks()
+{
+	local default=no
+	sigue=1
+	#inform "Stopping Automount..."
+	ask_yesno "Do you want to stop Automount?" || sigue=0
+	if [ "$sigue" = "1" ];then
+	sudo systemctl stop devmon@arcade.service 
+	sudo umount /media/* > /dev/tty12 2>&1
+	sigue=1
+	fi
+	sudo umount /media/* > /dev/tty12 2>&1
+	DISKS=$(fdisk -l | grep ^Disk\ / | sed -e 's/://g' | sed -e 's/,//g' | awk '{printf("%s %s%s\n", $2, $3, $4)}')
+	if [ "$DISKS" = "" ]; then
+		notify "No drives available to partition"
+		return 0
+	fi
+	while [ 0 = 0 ]; do
+        	ask_option $default "Partition Drives" "Choose a drive to partition" required $DISKS \
+			"Done" "-" || return 1
+
+		if [ "$ANSWER_OPTION" = "Done" ]; then
+			ask_yesno "Do you want to start Automount?" || sigue=0
+			if [ "$sigue" = "1" ];then
+			sudo systemctl start devmon@arcade.service 
+			fi
+			return 0
+		fi
+
+		inform "Running cfdisk on $ANSWER_OPTION..."
+		cfdisk $ANSWER_OPTION
+	done
+	return 0
+}
+
+worker_video_menu()
+{
+        local default=no
+	VIDEO_SETUP=1
+        while [ 0 = 0 ]; do
+                ask_option $default "Video Setup Menu" "Setup video" required \
+                        1 "Monitor Type" \
+                        2 "Monitor Orientation" \
+                        3 "Monitor Aspect" \
+						4 "Force Aspect for Vertical Games" \
+						5 "GLSL CRT Emulation on LCD Screen" \
+						6 "Video Boot Options" \
+            			7 "Custom & Presets Video Mode" \
+            			8 "Fix Video" \
+                        9 "Return to Main" || return
+
+                case $ANSWER_OPTION in
+                        "1")            execute worker select_monitor_menu && default=2 ;;
+                        "2")            execute worker select_monitor_orientation && default=3 ;;
+                        "3")            execute worker select_monitor_aspect && default=4 ;;
+                        "4")            execute worker select_force_aspect_vertical && default=5 ;;
+						"5")            execute worker select_monitor_crtlcd && default=6 ;;
+                        "6")            execute worker video_boot_options && default=7 ;;
+						"7")            execute worker video_custom && default=8 ;;
+						"8")            execute worker fix_video && default=9 ;;
+                        "9")            return 0 ;;
+                        *)              notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+        done
+
+        return 0
+}
+
+function pass_value()
+{
+	a=$1
+	b=$2
+	c=$3
+	inform "$a $b"
+		
+	vA=$(grep -i $a $b )
+	
+	vB=$(cat $b | grep $a | awk '{print $2}')
+	inform "valor vb $vB"
+	sleep 3
+		
+	return $vA $vB $vC
+	
+	}
+
+worker_video_boot_options()
+{
+        local default=no
+        Nowsplash=$(grep -i splash /boot/syslinux/syslinux.cfg )
+		Nowtime=$(cat /boot/syslinux/syslinux.cfg | grep 'timeout' | awk '{print $2}')
+		Hsplash=$(cat $CONFIG_FILE | grep 'Hsplash=' | awk -F = '{print $2}')
+		
+		if [ "$Nowsplash" != "" ]; then
+			Nowsplash="Enable"
+		else
+			Nowsplash="Disable"
+		fi
+		
+		if [ "$Hsplash" == "" ]; then
+			Hsplash="Horizontal"
+			sed -ri "s/Hsplash=.*//g" $CONFIG_FILE
+			sed -ri '/^$/d' $CONFIG_FILE
+			echo "Hsplash=Horizontal" >> $CONFIG_FILE
+		fi
+		
+	    while [ 0 = 0 ]; do
+                ask_option $default "Video Boot Options" "Setup video" required \
+					    1 "Video Card Output KHz Auto" \
+						2 "Video Card Output Khz List" \
+						3 "Syslinux's boot timeout - Timeout is $Nowtime " \
+						4 "Splash   Enable/Disable - Splash is $Nowsplash " \
+						5 "Splash   Orientation    - Splash is $Hsplash " \
+						6 "Return to Main" || return
+				
+				case $ANSWER_OPTION in
+                        "1")            execute worker vga_mode && default=2 ;;
+						"2")            execute worker video_syslinux && default=3 ;;
+						"3")	
+							ask_string "Change Boot Time\n1 second = 10 (Xsec x 10) " "0" || return
+							TIME=${ANSWER_STRING// /}
+							if [ "$TIME" != "0" ]; then
+							sudo sed -ri "s/^[#]*UI.*/UI vesamenu.c32/" /boot/syslinux/syslinux.cfg
+							sudo sed -ri "s/^timeout.*/timeout $TIME/" /boot/syslinux/syslinux.cfg
+							else
+							sudo sed -ri "s/^[#]*UI.*/#UI vesamenu.c32/" /boot/syslinux/syslinux.cfg
+							sudo sed -ri "s/^timeout.*/timeout $TIME/" /boot/syslinux/syslinux.cfg
+							fi
+							default=4 ;;
+						"4")	
+							SPLASH=$(grep -i splash /boot/syslinux/syslinux.cfg )
+							if [ "$SPLASH" = "" ]; then
+							SPLASH="quiet rd.udev.log-priority=3 splash"
+							FIND="quiet"
+							STATUS="Disable"
+							else	
+							SPLASH="quiet"
+							FIND="quiet rd.udev.log-priority=3 splash"
+							STATUS="Enable"
+							fi
+							ask_yesno "Splash is $STATUS\nDo you want change?" || nada=1
+							if [ "$nada" != "1" ]; then
+							sudo sed -ri "s/$FIND/$SPLASH/" /boot/syslinux/syslinux.cfg;
+							fi
+							nada="" && default=6 ;;
+						"5")
+						
+						while [ 0 = 0 ]; do
+							ask_option $default "Splash   Orientation" "Setup Boot Splash" required \
+								1 "Horizontal" \
+								2 "Vertical Right" \
+								3 "Vertical Left" \
+								4 "Return to Main" || return
+
+							case $ANSWER_OPTION in
+							"1") 
+								OR="Horizontal" 
+								cp /usr/share/plymouth/lh.png /usr/share/plymouth/arch-logo.png && default=4 ;;
+							"2") 
+								OR="Vertical Right" 
+								cp /usr/share/plymouth/lvr.png /usr/share/plymouth/arch-logo.png && default=4 ;;
+							"3") 
+								OR="Vertical Left" 
+								cp /usr/share/plymouth/lvl.png /usr/share/plymouth/arch-logo.png && default=4 ;;	
+							"4") return 0 ;;
+							esac
+							sed -ri "s/Hsplash=.*/Hsplash=$OR/g" $CONFIG_FILE
+							inform "Regenerating Splash...\n"	
+							mkinitcpio -p linux > /dev/tty12 2>&1
+						done
+							
+							none="" && default=6 ;;
+							
+						"6")            return 0 ;;
+                        *)              notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+        done
+
+        return 0
+                
+}
+
+initial_switchres()
+{
+	# First setup of switchres.conf
+	if [ ! -f "/home/arcade/switchres.conf" ]; then
+		inform "Creating switchres.conf config..."
+		touch /home/arcade/switchres.conf
+		chown arcade.nobody /home/arcade/switchres.conf
+
+		echo "threads=1" >> /home/arcade/switchres.conf
+		echo "ff=1" >> /home/arcade/switchres.conf
+	fi
+}
+
+worker_vga_mode()
+{
+	CGA=""
+	INTERFACES=""
+	mount -t ext2 -a
+	GRUB_FILE=/boot/syslinux/syslinux.cfg
+	if [ ! -f "/boot/syslinux/syslinux.cfg" ]; then
+		notify "You can only change the interface on an installed system. Not in the LiveCD"
+		return 1
+	fi
+	local default=no
+
+	PCIIDORIG=$(lspci -v|grep VGA|head -1|awk {'printf("%s",$1)'})
+	PCIID=$(lspci -v|grep VGA|head -1|sed -e 's/\./:/'|awk {'printf("PCI:%s",$1)'})
+
+	ALLDEVICES=$(find /sys/devices/pci0000\:00/ -iname card\*-\*)
+
+	for line in $ALLDEVICES
+	do
+        	WORDS=$(echo "$line" | sed -e 's/\// /g')
+        	START=0
+        	for dev in $WORDS
+        	do
+                	IS_DEV=$(echo $dev | grep card0-)
+                	if [ "$START" = "1" -a "$IS_DEV" != "" ]; then
+                        	THISDEV=$(echo $dev | sed -e 's/card[0-9]-//g')
+                        	if [ "$INTERFACES" = "" ]; then
+                                	INTERFACES="${THISDEV} ${PCIID}"
+                        	else
+                                	INTERFACES="${INTERFACES} ${THISDEV} ${PCIID}"
+                        	fi
+                	fi
+                	if [ "$dev" = "0000:$PCIIDORIG" ]; then
+                        	START=1
+                	fi
+        	done
+	done
+
+	while [ 0 = 0 ]; do
+		ask_option $default "Video Output KHz Mode" "Pick Video interface to change KHz" required $INTERFACES \
+			"Done" "-" || return 1
+
+		if [ "$ANSWER_OPTION" = "Done" ]; then
+			return 0
+		fi
+
+		default=Done
+
+		#NAME=$(echo $ANSWER_OPTION | awk -F _ '{printf("%s", $1)}')
+		NAME=$ANSWER_OPTION
+		#VIDEO=$(cat $GRUB_FILE | grep "kernel " | head -1)
+		VIDEO=$(cat $GRUB_FILE | grep "append " | head -1)	
+		CGA="no"
+		KLINE=""
+		VLINE=""
+
+		for karg in $VIDEO
+		do
+			IS_VIDEO=$(echo $karg | grep video=)
+			if [ "$IS_VIDEO" != "" ]; then
+				IS_THIS=$(echo $karg | grep $NAME)
+				if [ "$IS_THIS" != "" ]; then
+					CGA="yes"
+				else
+					if [ "$VLINE" = "" ]; then
+						VLINE=$karg
+					else
+						VLINE="$VLINE $karg"
+					fi
+				fi
+			else
+				if [ "$KLINE" = "" ]; then
+					KLINE=$karg
+				else
+					KLINE="$KLINE $karg"
+				fi
+			fi
+		done
+
+		default2=no
+		ask_option $default2 "Interface Type" "Pick output mode of interface" required \
+			1 "CGA 15.75khz" \
+			2 "NTSC TV (60 Hz only)" \
+			3 "PAL TV (50 Hz only)" \
+			4 "VGA 31.5khz" \
+			5 "Disable Output" \
+			6 "Cancel" || return 1
+
+		RES="640x480"
+                case $ANSWER_OPTION in
+                        "1")            CGA="yes" && RES="640x480" && default2=6 ;;
+                        "2")            CGA="yes" && RES="720x480" && default2=6 ;;
+                        "3")            CGA="yes" && RES="768x576" && default2=6 ;;
+                        "4")            CGA="no" && default2=6 ;;
+                        "5")            CGA="yes" && RES="disable" && default2=6 ;;
+                        "6")            CGA="" && default2=6 ;;
+                        *)              notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+
+		if [ "$CGA" != "" ]; then
+			if [ "$VLINE" = "" ]; then
+				NEWLINE=$KLINE
+			else
+				NEWLINE="$KLINE $VLINE"
+			fi
+			if [ "$CGA" = "yes" ]; then
+				if [ "$RES" = "disable" ]; then
+					NEWLINE="$NEWLINE video=${NAME}:d"
+				else
+					NEWLINE="$NEWLINE video=${NAME}:${RES}ec"
+				fi
+			fi
+
+			ask_yesno "Use new kernel command line: '$NEWLINE' ?\n" || return 1
+
+			IMAGE=$(cat $GRUB_FILE | grep "kernel " | awk {'print $2'} | head -1)	
+			cat $GRUB_FILE | sed -e 's/.*kernel .*/_REPLACE_ME_/g' > /tmp/grub.tmp
+			cat /tmp/grub.tmp | sed -e "s|_REPLACE_ME_|$NEWLINE|g" > /tmp/grub.conf
+			rm -f /tmp/grub.tmp
+
+			ask_yesno "Overwrite grub.conf with new one?\n" || return 1
+			mv /tmp/grub.conf $GRUB_FILE
+
+		fi
+	done	
+	notify "You will now need to pick your monitor type again."
+	select_monitor_menu
+	notify "You will need to reboot for the changes to take effect."
+	return 0
+}
+
+worker_select_frontend ()
+{
+        local default=no
+        while [ 0 = 0 ]; do
+                ask_option $default "Front-End Setup Menu" "Setup Front End/Window Manager" required \
+                        1 "AdvanceMENUPlus" \
+                        2 "Attract-Mode" \
+                        3 "LXDE Desktop" \
+                        4 "Return to Main" || return
+
+                case $ANSWER_OPTION in
+                        "1")            execute worker setup_advmenu && default=4 ;;
+						"2")            execute worker setup_attractmode && default=4 ;;
+                        "3")            execute worker setup_lxde && default=4 ;;
+                        "4")            return 0 ;;
+                        *)              notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+        done
+
+        return 0
+}
+
+create_xinit ()
+{
+	FILE=/home/arcade/.xinitrc
+	#CURKEYMAP=$(cat /etc/conf.d/keymaps | grep KEYMAP= | sed -e 's/KEYMAP=\"//g' | sed -e 's/\"//g')
+	#CURKEYMAP=$(cat /etc/rc.conf | grep KEYMAP= | sed -e 's/KEYMAP=\"//g' | sed -e 's/\"//g')
+	CURKEYMAP=$(cat /etc/vconsole.conf | grep KEYMAP= | sed -e 's/KEYMAP=//g' | sed -e 's/\=//g')
+	if [ "$CURKEYMAP" = "" ]; then
+		CURKEYMAP="es"
+	fi
+
+	touch $FILE
+	chown arcade.nobody $FILE
+	echo "export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:$PATH" > $FILE
+	echo "xhost +" >> $FILE
+	echo "xset s noblank" >> $FILE
+	echo "xset m 5/2 0" >> $FILE
+	echo "setxkbmap $CURKEYMAP" >> $FILE
+	echo "if [ ! -f \"/home/arcade/.advance/MAME.xml\" ]; then" >> $FILE
+    echo "	xmessage -buttons \"\" -timeout 10 -center Generating Mame XML Games Database &" >> $FILE
+	echo "	groovymame -listxml > ~/.advance/MAME.xml" >> $FILE
+	echo "fi" >> $FILE
+		
+	if [ "$1" = "advmenu" ]; then
+		if [ ! -f "/home/arcade/.advance/MAME.xml" ]; then
+		inform "Creating Mame XML file..."
+		groovymame -listxml > /home/arcade/.advance/MAME.xml
+		chown arcade.nobody /home/arcade/.advance/MAME.xml
+		fi
+	else
+		touch /home/arcade/.advance/MAME.xml
+		chown arcade.nobody /home/arcade/.advance/MAME.xml
+	fi
+	
+	return 0
+}
+
+worker_setup_advmenu ()
+{
+	create_xinit advmenu
+
+	echo "openbox --config-file ~/.config/GAop.xml &" >> /home/arcade/.xinitrc
+	if [ "$1" != "" ]; then
+	echo "$1 &" >> /home/arcade/.xinitrc
+	fi
+	echo "advmenu" >> /home/arcade/.xinitrc
+	sudo sed -ri "s/startx.*/startx \-- -nocursor\ \&>\\/dev\/tty12\ /g"	/home/arcade/.bash_profile
+
+	[ "$1" = "" ] && notify "Switched to AdvanceMENUPlus Front End\n\n\n\n"
+	return 0
+}
+
+worker_setup_attractmode ()
+{
+	create_xinit
+	echo "openbox --config-file ~/.config/GAop.xml &" >> /home/arcade/.xinitrc
+	if [ "$1" != "" ]; then
+	echo "$1 &" >> /home/arcade/.xinitrc
+	fi
+	echo "attract" >> /home/arcade/.xinitrc
+	sudo sed -ri "s/startx.*/startx \-- -nocursor\ \&>\\/dev\/tty12\ /g"	/home/arcade/.bash_profile
+	[ "$1" = "" ] && notify "Switched to AttractMode Front End\n\n\n\n"
+	return 0
+	
+	}
+	
+worker_setup_lxde ()
+{
+	if [ ! -f "/usr/bin/startlxde" ]; then
+		notify "LXDE Desktop isn't installed on this ISO build"
+		return 1
+	fi
+
+	create_xinit
+
+	sudo sed -ri "s/startx[[:space:]].*/startx/g"	/home/arcade/.bash_profile
+
+	[ "$1" != "" ] && echo "$1 &" >> /home/arcade/.xinitrc
+	echo "startlxde" >> /home/arcade/.xinitrc
+	[ "$1" = "" ] && notify "Switched to LXDE Window Manager\n\n\n\n"
+	return 0
+}
+
+worker_setup_wahcade ()
+{
+	create_xinit
+
+	echo "if [ ! -d \".wahcade\" ]; then" >> /home/arcade/.xinitrc
+	echo "	startlxde" >> /home/arcade/.xinitrc
+	echo "	wahcade-setup" >> /home/arcade/.xinitrc
+	echo "else" >> /home/arcade/.xinitrc
+	echo "openbox --config-file ~/.config/GAop.xml &" >> /home/arcade/.xinitrc
+	echo "	wahcade" >> /home/arcade/.xinitrc
+	echo "fi" >> /home/arcade/.xinitrc
+
+	sudo sed -ri "s/startx[[:space:]].*/startx/g"	/home/arcade/.bash_profile
+
+	notify "Switched to WahCade Front End\nWahCade Setup will run the first time\nYou will need to use Lxde to run setup after that"
+	return 0
+}
+
+worker_select_monitor_orientation ()
+{
+	local default=no
+
+	# Orientation
+	ask_option $default "Monitor Orientation" "What orienation is your monitor?" required \
+		"0" "Horizontal" \
+		"1" "Vertical" \
+		"2" "Rotating/Both" || return 1
+
+	MO=$ANSWER_OPTION
+	[ "$MO" = 0 ] && ORIENTATION=horizontal
+	[ "$MO" = 1 ] && ORIENTATION=vertical
+	[ "$MO" = 2 ] && ORIENTATION=rotate
+
+	inform "Setup switchres.conf for $ORIENTATION monitor..."
+
+	cat $CONFIG_FILE | sed -e 's/orientation=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "orientation=$ORIENTATION" >> $CONFIG_FILE
+
+	initial_switchres
+
+	# Monitor Orientation
+	cat /home/arcade/switchres.conf | sed -e 's/mo=.*//g' | grep -v ^$ > /home/arcade/switchres.conf.tmp
+	mv /home/arcade/switchres.conf.tmp /home/arcade/switchres.conf
+	echo "mo=$MO" >> /home/arcade/switchres.conf
+	chown arcade.nobody /home/arcade/switchres.conf
+
+	# Mame INI
+#	cat /home/arcade/mame.ini | sed -e 's/^orientation\s.*/#BLANK/g' | grep -v ^#BLANK$ > /home/arcade/mame.ini.tmp
+#	mv /home/arcade/mame.ini.tmp /home/arcade/mame.ini
+#	echo "orientation        $ORIENTATION" >> /home/arcade/mame.ini
+	sudo sed -ri "s/orientation.*/orientation			  $ORIENTATION/" /home/arcade/mame.ini
+	if [ "$MO" = 1 ]; then
+		sudo sed -ri "s/display_orientation.*/display_orientation flip_xy mirror_x/" /home/arcade/.advance/advmenup.rc
+	else
+		sudo sed -ri "s/display_orientation.*/display_orientation/" /home/arcade/.advance/advmenup.rc
+	fi
+	
+	chown arcade.nobody /home/arcade/mame.ini
+	chown arcade.nobody /home/arcade/.advmenu/advmenup.rc
+
+	return 0
+}
+
+worker_select_force_aspect_vertical ()
+{
+        local default=no
+
+	# Aspect
+	ask_option $default "Monitor Aspect" "What aspect do you like for vertical games on horizontal monitor?" required \
+		"1" "Normal (default)" \
+		"2" "Wider" \
+		"3" "Square" \
+		"4" "Stretch to Full Screen" \
+		"5" "Return to Main" || return 1
+
+	MA=$ANSWER_OPTION
+	[ "$MA" = 1 ] && ASPECT="4:3"
+	[ "$MA" = 2 ] && ASPECT="7:5"
+	[ "$MA" = 3 ] && ASPECT="3:3"
+	[ "$MA" = 4 ] && ASPECT="3:4"
+	[ "$MA" = 5 ] && return 0
+
+	inform "Setup MAME for $ASPECT monitor..."
+
+	cat $CONFIG_FILE | sed -e 's/aspect=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "aspect=$ASPECT" >> $CONFIG_FILE
+
+	# MAME INI
+	cat /home/arcade/ini/vertical.ini | sed -e 's/^monitor_aspect\s.*/#BLANK/g' | grep -v ^#BLANK$ > /home/arcade/ini/vertical.ini
+	mv /home/arcade/ini/vertical.ini /home/arcade/ini/vertical.ini
+	echo "aspect        $ASPECT" >> /home/arcade/ini/vertical.ini
+	chown arcade.nobody /home/arcade/ini/vertical.ini
+
+	return 0
+}
+
+worker_select_monitor_aspect ()
+{
+        local default=no
+	# Aspect
+	ask_option $default "Monitor Aspect" "What aspect ratio is your monitor?" required \
+		"1" "4:3 (standard CRT)" \
+		"2" "5:4" \
+		"3" "16:9 (HDTV)" \
+		"4" "16:10" \
+		"5" "Auto" \
+		"6" "Return to main" || return 1
+
+	MA=$ANSWER_OPTION
+	[ "$MA" = 1 ] && ASPECT=" 4:3"
+	[ "$MA" = 2 ] && ASPECT=" 5:4"
+	[ "$MA" = 3 ] && ASPECT="16:9"
+	[ "$MA" = 4 ] && ASPECT="16:10"
+	[ "$MA" = 5 ] && ASPECT="auto"
+	[ "$MA" = 6 ] && return 0
+
+	inform "Setup MAME for $ASPECT monitor..."
+
+	
+	if [ "$MA" = "5" ]; then
+	sudo sed -ri "s/^aspect[[:space:]].*/aspect			  $ASPECT/g" /home/arcade/mame.ini
+	chown arcade.nobody /home/arcade/mame.ini
+
+	else
+		cat $CONFIG_FILE | sed -e 's/aspect=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+		mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+		echo "aspect=$ASPECT" >> $CONFIG_FILE
+
+		# MAME INI
+		sudo sed -ri "s/^aspect[[:space:]].*/aspect			  $ASPECT/g" /home/arcade/mame.ini
+		chown arcade.nobody /home/arcade/mame.ini
+	
+	fi
+
+	return 0
+}
+
+worker_select_monitor_crtlcd ()
+{
+    local default=no
+    lcd=$(grep -r 'monitor' /home/arcade/mame.ini|cut -d" " -f3)
+	lcdd=$(echo $lcd|cut -d"_" -f1)
+	if [ "$lcd" != "lcd" -a "$lcdd" != "vesa" ]; then
+		notify "You can change the GLSL CRT-EMU only if your display is a LCD or VESA"
+		return 0
+	fi
+			Nowglsl=$(grep -r 'gl_glsl[[:space:]]' mame.ini|cut -d" " -f3)
+			if [ "$Nowglsl" != "1" ]; then
+			Nowglsl=Disable
+			else
+			Nowglsl=Enable
+			fi	
+			
+	while [ 0 = 0 ]; do
+	# Aspect #monitor  lcd crt-emu
+	ask_option $default "GLSL Monitor CRT Emulator" "Configure your GLSL Emulator" required \
+		1 "Gamma of simulated CRT" \
+		2 "Gamma of display monitor" \
+		3 "Overscan" \
+		4 "Aspect ratio" \
+		5 "Simulated distance from viewer to monitor" \
+		6 "Radius of curvature" \
+		7 "Tilt angle in radians" \
+		8 "Size of curved corners" \
+		9 "Border smoothness" \
+		10 "Enable/Disable GLSL CRT Emulator - GLSL is $Nowglsl -" \
+		11 "Set all Default" \
+		12 "Return to Main" || return
+		
+		case $ANSWER_OPTION in
+			"1")
+			valor=$(grep -r 'CRTgamma =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d" " -f2|cut -d";" -f1)
+			ask_string "Gamma of simulated CRT Default = 2.4" "$valor" || return 0
+	       		scrt=${ANSWER_STRING// /} 
+			sudo sed -ri "s/CRTgamma =.*/CRTgamma = $scrt;/g" /home/arcade/CRT/CRT-geom.vsh && default=2 ;;
+			"2")
+			valor=$(grep -r 'monitorgamma =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d" " -f2|cut -d";" -f1)
+			ask_string "Gamma of display monitor Default = 2.2" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /} 
+			sudo sed -ri "s/monitorgamma =.*/monitorgamma = $scrt;/g" /home/arcade/CRT/CRT-geom.vsh && default=3 ;;
+			"3")
+			valor=$(grep -r 'overscan =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d"(" -f2|cut -d" " -f2|cut -d";" -f1|cut -d")" -f1)
+			ask_string "Overscan Default = 1.01,1.01" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /}
+			sudo sed -ri "s/overscan =.*/overscan = vec2($scrt);/g" /home/arcade/CRT/CRT-geom.vsh  && default=4 ;;
+			"4")
+			valor=$(grep -r 'aspect =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d"(" -f2|cut -d" " -f2|cut -d";" -f1|cut -d")" -f1)
+			ask_string "Aspect ratio Default = 1.0,0.75" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /} 
+			sudo sed -ri "s/aspect =.*/aspect = vec2($scrt);/g" /home/arcade/CRT/CRT-geom.vsh && default=5 ;;
+			"5")
+			valor=$(grep -r ' d =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d" " -f2|cut -d";" -f1)
+			ask_string "Simulated distance Default = 2.0" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /} 
+			sudo sed -ri "s/d =.*/d = $scrt;/g" /home/arcade/CRT/CRT-geom.vsh && default=6 ;;
+			"6")
+			valor=$(grep -r 'R =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d" " -f2|cut -d";" -f1)
+			ask_string "Radius of curvature Default = 2.0" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /} 
+			sudo sed -ri "s/R =.*/R = $scrt;/g" /home/arcade/CRT/CRT-geom.vsh && default=7 ;;
+			"7")
+			valor=$(grep -r 'vec2 angle = vec2' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d"(" -f2|cut -d" " -f2|cut -d";" -f1|cut -d")" -f1)
+			ask_string "Tilt angle in radians Default = 0.0,-0.15" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /} 
+			sudo sed -ri "s/angle =.*/angle = vec2($scrt);/g" /home/arcade/CRT/CRT-geom.vsh && default=8 ;;
+			"8")
+			valor=$(grep -r 'cornersize =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d" " -f2|cut -d";" -f1)
+			ask_string "Size of curved corners Default = 0.03" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /} 
+			sudo sed -ri "s/cornersize =.*/cornersize = $scrt;/g" /home/arcade/CRT/CRT-geom.vsh && default=9 ;;
+			"9")
+			valor=$(grep -r 'cornersmooth =' /home/arcade/CRT/CRT-geom.vsh |cut -d"=" -f2|cut -d" " -f2|cut -d";" -f1)
+			ask_string "Border smoothness Default = 1000.0" "$valor" || return 1
+	       		scrt=${ANSWER_STRING// /}
+			sudo sed -ri "s/cornersmooth =.*/cornersmooth = $scrt;/g" /home/arcade/CRT/CRT-geom.vsh && default=10 ;;
+			"10")
+			activado=$(grep -r 'gl_glsl[[:space:]]' mame.ini|cut -d" " -f3)
+			if [ "$activado" != "1" ]; then
+			mensa=Disable
+			valor=1
+			else
+			mensa=Enable
+			valor=0
+			fi	
+			ask_yesno "GLSL CRT Emulator is $mensa\nDo you want change?" || nada=1
+			if [ "$nada" != "1" ]; then
+			sudo sed -ri "s/gl_glsl[[:space:]].*/gl_glsl			  $valor/g" /home/arcade/mame.ini
+			fi
+			nada="" && default=11 ;;
+			"11")
+			cp /home/arcade/CRT/CRT-geom.vsh.Default /home/arcade/CRT/CRT-geom.vsh	&& default=12 ;;
+			"12") return 0 ;;
+			*)	notify "Bad option $ANSWER_OPTION given";;
+			esac
+	done
+	return 0
+}
+
+worker_select_multisync_monitor () {
+	local default=no
+	local MONITOR=generic
+        ask_option $default "Monitor Type" "What kind of monitor are you using?" required \
+	"1" "D9200 15.25-31.5KHz" \
+	"2" "D9800 15.25-38KHz" \
+	"3" "M3192 15.25-31.5KHz" \
+	"4" "M2929 30KHz-50KHz" || return 1
+        [ "$ANSWER_OPTION" = 1 ] && MONITOR=d9200
+        [ "$ANSWER_OPTION" = 2 ] && MONITOR=d9800
+        [ "$ANSWER_OPTION" = 3 ] && MONITOR=m3192
+        [ "$ANSWER_OPTION" = 4 ] && MONITOR=m2929
+
+	set_monitor $MONITOR && return 0
+	return 1
+}
+
+worker_select_monitor_menu ()
+{
+	local default=no
+	local MONITOR=generic
+        ask_option $default "Monitor Type" "What kind of monitor are you using" required \
+        "1" "Generic 15.7 kHz" \
+        "2" "Hantarex MTC 9110" \
+        "3" "Hantarex Polo" \
+        "4" "Hantarex Polostar 25" \
+        "5" "Makvision 2929D" \
+        "6" "NTSC TV - 60 Hz/525 15.734KHz (60 Hz only)" \
+        "7" "PAL TV - 50 Hz/625  15.625KHz (50 Hz only)" \
+        "8" "Wells Gardner D9200" \
+        "9" "Wells Gardner D9400" \
+        "10" "Wells Gardner D9800" \
+        "11" "Wells Gardner K7000" \
+        "12" "Wells Gardner 25K7131" \
+        "13" "Wei-Ya M3129" \
+        "14" "Nanao MS-2930, MS-2931" \
+        "15" "Nanao MS9-29" \
+        "16" "Arcade 15.7 kHz - standard resolution" \
+        "17" "Arcade 15.7-16.5 kHz - extended resolution" \
+        "18" "Arcade 25.0 kHz - medium resolution" \
+        "19" "Arcade 31.5 kHz - high resolution" \
+        "20" "Arcade 15.7/25.0 kHz - dual-sync" \
+        "21" "Arcade 15.7/25.0/31.5 kHz - tri-sync" \
+        "22" "Rodotron 666B-29" \
+        "23" "Pc Crt 31kHz/120Hz" \
+        "24" "Pc Crt 70kHz/120Hz" \
+        "25" "VESA GTF  640 x 480" \
+        "26" "VESA GTF  800 x 600" \
+        "27" "VESA GTF 1024 x 768" \
+		"28" "VESA GTF 1280 x 1024" \
+		"29" "LCD" || return 1
+        [ "$ANSWER_OPTION" = 1 ] && MONITOR=generic_15
+        [ "$ANSWER_OPTION" = 2 ] && MONITOR=h9110
+        [ "$ANSWER_OPTION" = 3 ] && MONITOR=polo
+        [ "$ANSWER_OPTION" = 4 ] && MONITOR=pstar
+        [ "$ANSWER_OPTION" = 5 ] && MONITOR=m2929
+        [ "$ANSWER_OPTION" = 6 ] && MONITOR=ntsc
+        [ "$ANSWER_OPTION" = 7 ] && MONITOR=pal
+        [ "$ANSWER_OPTION" = 8 ] && MONITOR=d9200
+		[ "$ANSWER_OPTION" = 9 ] && MONITOR=d9400
+		[ "$ANSWER_OPTION" = 10 ] && MONITOR=d9800
+		[ "$ANSWER_OPTION" = 11 ] && MONITOR=k7000
+		[ "$ANSWER_OPTION" = 12 ] && MONITOR=k7131
+		[ "$ANSWER_OPTION" = 13 ] && MONITOR=m3129
+		[ "$ANSWER_OPTION" = 14 ] && MONITOR=ms2930
+		[ "$ANSWER_OPTION" = 15 ] && MONITOR=ms929
+		[ "$ANSWER_OPTION" = 16 ] && MONITOR=arcade_15
+		[ "$ANSWER_OPTION" = 17 ] && MONITOR=arcade_15ex
+		[ "$ANSWER_OPTION" = 18 ] && MONITOR=arcade_25
+		[ "$ANSWER_OPTION" = 19 ] && MONITOR=arcade_31
+		[ "$ANSWER_OPTION" = 20 ] && MONITOR=arcade_15_25
+		[ "$ANSWER_OPTION" = 21 ] && MONITOR=arcade_15_25_31
+		[ "$ANSWER_OPTION" = 22 ] && MONITOR=r666b
+		[ "$ANSWER_OPTION" = 23 ] && MONITOR=pc_31_120
+		[ "$ANSWER_OPTION" = 24 ] && MONITOR=pc_70_120
+		[ "$ANSWER_OPTION" = 25 ] && MONITOR=vesa_480
+		[ "$ANSWER_OPTION" = 26 ] && MONITOR=vesa_600
+		[ "$ANSWER_OPTION" = 27 ] && MONITOR=vesa_768
+		[ "$ANSWER_OPTION" = 28 ] && MONITOR=vesa_1024
+		[ "$ANSWER_OPTION" = 29 ] && MONITOR=lcd
+        [ "$ANSWER_OPTION" = 30 ] && MONITOR= && worker_select_multisync_monitor && return 0
+
+	if [ "$MONITOR" = "" ]; then
+		return 1
+	fi
+
+	set_monitor $MONITOR && return 0
+	return 1
+}
+
+set_monitor()
+{
+	local MONITOR=$1
+
+	if [ "$MONITOR" = "" ]; then
+		notify "Monitor is empty!"
+		return 1
+	fi
+
+	cat $CONFIG_FILE | sed -e 's/monitor=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "monitor=$MONITOR" >> $CONFIG_FILE
+
+	ask_yesno "\nSetup /etc/X11/xorg.conf and /home/arcade/switchres.conf?\n\n" || return
+	inform "Creating X Windows configuration for $MONITOR monitor..."
+
+	rm -f /etc/X11/xorg.conf
+	/usr/local/bin/xorg.sh $MONITOR > /etc/X11/xorg.conf
+	chown arcade.nobody /etc/X11/xorg.conf
+	if [ -f "/etc/X11/xorg.conf" ]; then
+		cp -f /etc/X11/xorg.conf $CONFIG_DIR/
+	fi
+
+	initial_switchres
+
+	inform "Setup switchres.conf for $MONITOR monitor..."
+
+	
+	if [ "$MONITOR" = "lcd" ]; then
+	
+	sudo sed -ri "s/^monitor[[:space:]].*/monitor			  $MONITOR/g" /home/arcade/mame.ini
+	chown arcade.nobody /home/arcade/mame.ini
+	cat /home/arcade/switchres.conf | sed -e 's/monitor=.*//g' | grep -v ^$ > /home/arcade/switchres.conf.tmp
+	mv /home/arcade/switchres.conf.tmp /home/arcade/switchres.conf
+	echo "monitor=$MONITOR" >> /home/arcade/switchres.conf
+	chown arcade.nobody /home/arcade/switchres.conf	
+	chmod 777 /home/arcade/switchres.conf
+	MONITOR=""
+	return 0
+
+	else 
+
+	# Monitor type
+	cat /home/arcade/switchres.conf | sed -e 's/monitor=.*//g' | grep -v ^$ > /home/arcade/switchres.conf.tmp
+	mv /home/arcade/switchres.conf.tmp /home/arcade/switchres.conf
+	echo "monitor=$MONITOR" >> /home/arcade/switchres.conf
+	chown arcade.nobody /home/arcade/switchres.conf
+
+	# Mame INI
+	#cat /home/arcade/mame.ini | sed -e 's/^monitor\s.*/#BLANK/g' | grep -v ^#BLANK$ > /home/arcade/mame.ini.tmp
+	#mv /home/arcade/mame.ini.tmp /home/arcade/mame.ini
+	#echo "monitor        $MONITOR" >> /home/arcade/mame.ini
+	sudo sed -ri "s/^monitor[[:space:]].*/monitor			  $MONITOR/g" /home/arcade/mame.ini
+	chown arcade.nobody /home/arcade/mame.ini
+	
+	#Si config monitor Arcade ponemos los valores CRT-emu y Aspect-lcd por defecto deshabilitados
+	#if [ "$MONITOR" != "lcd" -o "$MONITOR" != "vesa_480" -o "$MONITOR" != "vesa_600" -o "$MONITOR" != "vesa_768" -o "$MONITOR" != "vesa_1024" ]; then
+	lcdd=$(echo $MONITOR|cut -d"_" -f1)
+	if [ "$lcd" != "lcd" -a "$lcdd" != "vesa" ]; then
+	inform "Disabling GLSL CRT emulation for LCD monitor"
+	sleep 4
+	sudo sed -ri "s/gl_glsl[[:space:]].*/gl_glsl			  0/g" /home/arcade/mame.ini
+	chown arcade.nobody /home/arcade/mame.ini
+	sudo sed -ri "s/^aspect[[:space:]].*/aspect			  auto/g" /home/arcade/mame.ini
+	chown arcade.nobody /home/arcade/mame.ini
+	sudo sed -ri "s/^aspect=.*/aspect= 4:3/g" /home/arcade/switchres.conf
+	chown arcade.nobody /home/arcade/switchres.conf
+	#cat /home/arcade/switchres.conf | sed -e 's/aspect=.*//g' | grep -v ^$ > /home/arcade/switchres.conf.tmp
+	#falta switchres
+	fi
+
+	return 0
+	fi
+}
+
+worker_video_custom ()
+{
+	
+	#while [ ! -f "/etc/X11/xorg.conf" ]; do
+	if [ ! -f "/etc/X11/xorg.conf" ]; then
+		notify "Please Select Monitor type"
+		worker_select_monitor_menu
+	fi
+	#done
+
+	local default=no
+        while [ 0 = 0 ]; do
+                ask_option $default "Custom Video Mode & Presets" "Video Mode & Presets" required \
+                        1 "Xorg/Desktop" \
+                        2 "MAME/Switchres Presets" \
+                        3 "Video Resolution Boot " \
+                        4 "Return to Main" || return
+
+                case $ANSWER_OPTION in
+                        "1")            execute worker xorg_custom && default=2 ;;
+                        "2")            execute worker crtrange_presets && default=3 ;;
+                        "3")            execute worker boot_custom && default=4 ;;
+                        "4")            return 0 ;;
+                        *)              notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+        done
+
+        return 0
+}
+
+worker_xorg_custom ()
+{		
+	local default=no
+	ask_option $default "Choose Video Mode" "" required \
+				1 "Manual Video Mode" \
+				2 "List Video Mode" || return
+										
+					if [ $ANSWER_OPTION = "1" ]; then
+						ask_string "Example Custom Video Mode (648 480 60)" "" || return 1
+							MODELI=${ANSWER_STRING}
+							inform "$MODELI"
+							sleep 1
+							MONITOR=$(cat /home/arcade/switchres.conf |grep monitor | sed -e 's/monitor=//g')
+							inform $MONITOR
+							sleep 1
+							#switchres --calc $MODELI --monitor $MONITOR >>/etc/X11/xorg.conf
+							#/usr/local/bin/xorg.sh $MONITOR > /etc/X11/xorg.conf
+							return 0
+					else
+						local default=no
+						ask_option $default "Custom Video Mode" "" required \
+							1 "328x240@60" \
+							2 "648x480@60" \
+							3 "728x480@59" \
+							4 "768x576@60" \
+							5 "808x600@50" \
+							6 "1032@768@40" || return
+								case $ANSWER_OPTION in 
+								"1")	VMODE="328 240 60" ;;
+								"2")	VMODE="648 480 60" ;;
+								"3")	VMODE="728 480 59" ;;
+								"4")	VMODE="768 576 60" ;;
+								"5")	VMODE="808 600 60" ;;
+								"6")	VMODE="1032 768 60" ;;
+								*)	notify "Bad option $ANSWER_OPTION given" ;;
+								esac
+							
+							MONITOR=$(cat /home/arcade/switchres.conf |grep monitor | sed -e 's/monitor=//g')
+							VSMODE=$(switchres --calc $VMODE --monitor h9110 |grep "#" | sed -e 's/#  //')
+							VMODE=$(echo $VMODE | sed -e '1s/ /X/1' |sed -e '1s/ /@/1')
+							notify "Video Mode Select $VMODE New Video Mode $VSMODE"
+										
+						return 0
+					fi
+	
+}
+
+worker_crtrange_presets ()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Presets MAME/Switchres" "" required \
+							0 "crt_range0" \
+							1 "crt_range1" \
+							2 "crt_range2" \
+							3 "crt_range3" \
+							4 "crt_range4" \
+							5 "crt_range5" \
+							6 "crt_range6" \
+							7 "crt_range7" \
+							8 "crt_range8" \
+							9 "crt_range9" \
+							10 "Return to Main" || return
+					case $ANSWER_OPTION in
+                        [0-9])  
+								RANGO="crt_range$ANSWER_OPTION"
+								#RVALOR=$(grep -ri $RANGO /home/arcade/.mame/mame.ini|awk -F $RANGO '{print $2}')
+								RVALOR=$(echo$(awk '/'$RANGO'/ {$1=""; print }' /home/arcade/.mame/mame.ini))
+								ask_string "Parameters:\n\
+								\nHfreqMin-HfreqMax, VfreqMin-VfreqMax, HFrontPorch, HSyncPulse, HBackPorch, VfrontPorch, VSyncPulse, VBackPorch, HSyncPol, VSyncPol, ProgressiveLinesMin, ProgressiveLinesMax, InterlacedLinesMin, InterlacedLinesMax\n
+								\nExample:\n
+								crt_range0  15625.00-15625.00, 50.00-50.00, 1.500, 4.700, 5.800, 0.064, 0.160, 1.056, 0, 0, 192, 288, 448, 576\n\n
+								\nYour Values:\n
+								$RVALOR" "$RVALOR" "Select your Present for $RANGO:"
+								crtr=$ANSWER_STRING
+								if [ -z "$ANSWER_STRING" ]; then
+									notify "Defaults Value Auto\n"
+									crtr="auto"
+								fi
+								sudo sed -ri "s/^$RANGO.*/$RANGO $crtr/" /home/arcade/.mame/mame.ini
+								sudo sed -ri "s/^$RANGO.*/$RANGO $crtr/" /home/arcade/switchres.conf
+								default=$(expr $ANSWER_OPTION + 1);;
+						10) return 0;;
+                        *)      notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+        done									
+							
+		return 0
+}
+
+worker_boot_custom ()
+{
+	local default=no
+	ask_option $default "Custom Video Boot" "" required \
+							1 "320x240@60-15Khz" \
+							2 "640x480@60-15Khz" \
+							3 "720x480@59-15Khz" \
+							4 "760x576@60-15Khz" \
+							5 "800x600@50-15Khz" \
+							6 "1032@768@40-15Khz" \
+							7 "320x240@60-25Khz" \
+							8 "512x384@58-25Khz" \
+							9 "800x600@60-25Khz" \
+							10 "1024x768@50-25Khz" \
+							11 "640x480@60-31Khz" || return
+								case $ANSWER_OPTION in 
+								"1")	VBMODE="328 240 60" ;;
+								"2")	VBMODE="648 480 60" ;;
+								"3")	VBMODE="728 480 59" ;;
+								"4")	VBMODE="768 576 60" ;;
+								"5")	VBMODE="808 600 60" ;;
+								"6")	VBMODE="1032 768 60" ;;
+								*)	notify "Bad option $ANSWER_OPTION given" ;;
+								esac
+							
+							notify "Video Mode Select $VBMODE"
+																	
+						return 0
+}
+
+worker_fix_video ()
+{
+	
+	local default=no
+        while [ 0 = 0 ]; do
+                ask_option $default "Fix Video Problems" "Fix Video Problems" required \
+                        1 "Fast Speed in Games" \
+                        2 "Force Xorg.conf" \
+                        3 "Force MinDotClock" \
+                        4 "Fix Tearing " \
+                        5 "Return to Main" || return
+
+                case $ANSWER_OPTION in
+                        "1")            execute worker fast_speed && default=2 ;;
+                        "2")            execute worker force_xorg && default=3 ;;
+                        "3")            execute worker mindotclock && default=4 ;;
+                        "4")
+							ask_yesno "\nDo you want change to Enable this Options?\n\n\n" || op=1
+							if [ "$op" != "1" ]; then
+								sed -ri "s/^[#]*Option ShadowPrimary on/Option ShadowPrimary on/" /etc/X11/xorg.conf
+							else 
+								sed -ri "s/^[#]*Option ShadowPrimary on/#Option ShadowPrimary on/" /etc/X11/xorg.conf
+							fi
+							op=""
+							default=5 ;;
+                        "5")            return 0 ;;
+                        *)              notify "Bad option $ANSWER_OPTION given" ;;
+                esac
+        done
+
+        return 0
+}
+
+worker_fast_speed()
+{
+	notify "Regenerating Kernel\nPlease Reboot Arcade PC "	
+	mkinitcpio -p linux > /dev/tty12 2>&1
+	return 0
+return	
+	}
+
+worker_force_xorg()
+{
+	sudo X -configure > /dev/tty12 2>&1
+	cp /root/xorg.conf.new /etc/X11/xorg.conf > /dev/tty12 2>&1
+	notify "\nNow you have a new xorg.conf from local hardware\n"
+	return 0
+	}
+
+worker_mindotclock()
+{
+	MDOT=$(grep "^[#]*dotclock_min" /home/arcade/mame.ini | awk '{print $2}')
+	ask_string "Change MinDotClock\nDefault=0 Recommend=8" "$MDOT" || return 1
+	MDOTT=${ANSWER_STRING// /}
+	sed -ri "s/^[#]*dotclock_min.*/dotclock_min 			  $MDOTT/" /home/arcade/mame.ini
+	return	0
+	}
+
+
+worker_select_swap ()
+{
+	local default=no
+	DRIVES=$(fdisk -l |grep ^/dev/|grep "82 Linux swap"|grep -v $AUTO_DRIVE|sed -e s/\*//g|awk '{printf("%s %s\n", $1, $4)}')
+	if [ "$DRIVES" = "" ]; then
+		notify "No drives are available to use"
+		return 0
+	fi
+        ask_option $default "Swap Partition" "Choose a drive" required $DRIVES || return 1
+
+	cat $CONFIG_FILE | sed -e 's/swap=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "swap=$ANSWER_OPTION" >> $CONFIG_FILE
+
+	ask_yesno "Setup $ANSWER_OPTION as swap space?" || return
+	inform "Creating swap space on $ANSWER_OPTION partition..."
+	mkswap -L SwapSpace $ANSWER_OPTION
+	inform "Starting swap space..."
+	swapon $ANSWER_OPTION
+	SWAP_DRIVE=$ANSWER_OPTION
+
+	return 0
+}
+
+
+worker_select_home ()
+{
+	local default=no
+	if [ ! -f "/home/arcade/1" ]; then
+		notify "Home directory is already mounted"
+		ask_yesno "Unmount and use another drive?" || return 0
+		umount /home/arcade
+	fi
+	DRIVES=$(fdisk -l |grep ^/dev/|grep "83 Linux"|grep -v $AUTO_DRIVE|sed -e s/\*//g|awk '{printf("%s %s\n", $1, $4)}')
+	if [ "$DRIVES" = "" ]; then
+		notify "No drives are available to use"
+		return 0
+	fi
+        ask_option $default "Home Partition" "Choose a drive" required $DRIVES || return 1
+
+	if [ "$ROMS_DRIVE" = "$ANSWER_OPTION" ]; then
+		notify "You cannot use the same drive for the Home drive as the Roms drive"
+		return 1
+	fi
+
+	HOME_DRIVE=$ANSWER_OPTION
+
+	cat $CONFIG_FILE | sed -e 's/home=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "home=$ANSWER_OPTION" >> $CONFIG_FILE
+
+	FORMAT=yes
+	ask_yesno "Format $ANSWER_OPTION partion?\nWarning! All data will be erased!!!" || FORMAT=no
+	if [ "$FORMAT" = "yes" ]; then
+		inform "Formatting $ANSWER_OPTION partition"
+		mkfs.ext4 -O ^64bit -q $ANSWER_OPTION
+		e2label $ANSWER_OPTION /home/arcade
+	fi
+
+	ask_yesno "Mount $ANSWER_OPTION /home/arcade?" || return
+	inform "Creating /home/arcade directory..."
+	if [ ! -d "/home/arcade.default" ]; then
+		mv /home/arcade /home/arcade.default
+	fi
+	mkdir /home/arcade
+	chown arcade.nobody /home/arcade
+	sudo umount $ANSWER_OPTION > /dev/tty12 2>&1
+	mount $ANSWER_OPTION /home/arcade
+	inform "Copying default arcade users files to /home/arcade/"
+	cp -rpda /home/arcade.default/. /home/arcade/
+	chown -R arcade.nobody /home/arcade
+	rm -f /home/arcade/1
+	rm -rf /home/arcade.default
+	inform "Done creating /home/arcade user directory"
+
+	return 0
+}
+
+
+worker_select_roms ()
+{
+	local default=no
+	if [ ! -f "/home/roms/1" ]; then
+		notify "ROMs/Snaps directory is already mounted"
+		ask_yesno "Unmount and use another drive?" || return 0
+		umount /home/roms
+	fi
+	DRIVES=$(fdisk -l |grep ^/dev/|grep -v "Linux swap"|grep -v "Extended"|grep -v $AUTO_DRIVE|sed -e s/\*//g|awk '{printf("%s %s\n", $1, $4)}')
+	if [ "$DRIVES" = "" ]; then
+		notify "No drives are available to use"
+		return 0
+	fi
+        ask_option $default "Rom/Snap Partition" "Choose a drive" required $DRIVES || return 1
+
+	if [ "$HOME_DRIVE" = "$ANSWER_OPTION" ]; then
+		notify "You cannot use the same drive for Roms as the Home drive"
+		return 1
+	fi
+
+	ROMS_DRIVE=$ANSWER_OPTION
+
+	cat $CONFIG_FILE | sed -e 's/data=.*//g' | grep -v ^$ > ${CONFIG_FILE_TMP}
+	mv ${CONFIG_FILE_TMP} ${CONFIG_FILE}
+	echo "data=$ANSWER_OPTION" >> $CONFIG_FILE
+
+	FORMAT=yes
+	ask_yesno "Format $ANSWER_OPTION partion?\nWarning! All data will be erased!!!" || FORMAT=no
+	if [ "$FORMAT" = "yes" ]; then
+		inform "Formatting $ANSWER_OPTION partition"
+		mkfs.ext4 -F -q $ANSWER_OPTION
+		e2label $ANSWER_OPTION /home/roms
+	fi
+
+	ROM_FSTYPE=$(fdisk -l | grep $ANSWER_OPTION | awk '{print $6}')
+	if [ "$ROM_FSTYPE" != "Linux" ]; then
+		#EXTRA_MOUNT_OPTS="-o uid=1000,gid=1000"
+		EXTRA_MOUNT_OPTS="-o rw"
+	fi
+
+	ask_yesno "Mount $ANSWER_OPTION /home/roms?" || return
+	inform "Mounting Rom/Snap partition $ANSWER_OPTION in /home/roms/"
+	
+	if [ -f "/home/roms/1" -a ! -d "/home/roms.default" ]; then
+		
+		mv -f /home/roms /home/roms.default
+		
+	mkdir /home/roms
+	chown -Rf arcade.nobody /home/roms
+	chmod 777 /home/roms
+	fi
+
+	chown -Rf arcade.nobody /home/roms
+	chmod 777 /home/roms
+	sudo umount $ANSWER_OPTION > /dev/tty12 2>&1
+	mount $ANSWER_OPTION $EXTRA_MOUNT_OPTS /home/roms
+	notify "Drive is mounted under /home/roms/"
+
+	CROMS=yes
+	if [ -d "/home/roms.default" ]; then
+	ask_yesno "Do you want COPY default ROMS files to /home/roms?" || CROMS=no
+	if [ "$CROMS" = "yes" ]; then
+	inform "Copying default ROMS files"
+	cp -rpda /home/roms.default/. /home/roms/
+	chown -Rf arcade.nobody /home/roms
+	rm -f /home/roms/1
+	rm -rf /home/roms.default
+	fi
+	#DROMS=yes
+	#ask_yesno "Do you want DELETE Backup previous ROMS files?" || DROMS=no
+	#if [ "$DROMS" = "yes" ]; then
+	#inform "Deleting default ROMS files"
+	#rm -rf /home/roms.default
+	#fi
+	fi
+	inform "Done creating /home/roms user directory"
+
+	return 0
+}
+
+
+worker_intro ()
+{
+	notify "Welcome to Groovy Arcade Linux Setup.\n\n\
+ First you should go through the Setup Menu for setting up the basic system.\
+ Second you can choose to run the LiveCD or do a disk drive installation.\
+ You can view all output from commands by viewing your VC7 console (ALT-F7).\
+ ALT-F1 will bring you back here, and ALT-F2 to get a console command prompt.\
+ \n\n$DISCLAIMER"
+}
+
+
+worker_configure ()
+{
+	var_UI_TYPE=${arg_ui_type:-dia}
+	ui_init
+}
+
+create_devmap ()
+{
+	if [ ! -f "$TMP_DEV_MAP" ]; then
+        	inform "Generating GRUB device map...\nThis could take a while.\n\n Please be patient."
+        	/sbin/grub --no-floppy --device-map $TMP_DEV_MAP >/tmp/grub.log 2>&1 <<EOF
+quit
+EOF
+	fi
+	return 0
+}
+
+worker_msg_report () {
+	notify "Type gasetup at the command prompt to re-enter installer"
+	stop_installer 0
+}
+
+worker_abort_installer ()
+{
+	ret=0
+	ask_yesno "Exit Setup Menu?" || return
+	#maybe_interactive_rollback_filesystems || ret=$?
+	stop_installer || ret=$?
+	return $ret
+}
+
+
+
+
+worker_extras_menu() 
+{
+	local default=no
+	while [ 0 = 0 ]; do
+                ask_option $default "Update" "Update" required \
+                        1 "GroovyMAME Update" \
+                        2 "AdvmenuPlus Update" \
+                        3 "AttractMode Update" \
+                        4 "Gasetup Menu Update" \
+                        5 "Scripts Menu Update" \
+                        6 "System Update" \
+                        7 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+                        "1") execute worker updatega groovy && default=2 ;;
+                        "2") execute worker updatega advmenu && default=3 ;;
+                        "3") execute worker updatega attract && default=4 ;;
+                        "4") execute worker updatemenu && default=5 ;;
+						"5") execute worker updatega scripts && default=6 ;;
+						"6") execute worker updatega system && default=7 ;;
+                        "7") return 0 ;;
+                        *) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0
+}
+
+worker_updatega ()
+{
+	local default=no
+	gro=""
+	gdrive=""
+	utmp="/home/arcade/Update"
+	cd $utmp
+	rm UpdateGA > /dev/tty12 2>&1
+	[ "$1" = groovy  ] && MSG=GroovyMame
+	[ "$1" = advmenu ] && MSG=AdvmenuPlus
+	[ "$1" = attract ] && MSG=AttractMode
+	[ "$1" = scripts ] && MSG=Scripts
+	[ "$1" = system  ] && MSG=System
+
+		ask_option $default "Update from" "" required \
+			1 "Online Site" \
+			2 "Local Site" || return
+			case $ANSWER_OPTION in 
+				"1")		gdrivedl "https://drive.google.com/open?id=0B0NB2HYUHHktZmUwVXNucnRVS2c" > /dev/tty12 2>&1
+							gro=$(grep -ri "$1*" $utmp/UpdateGA|cut -d " " -f1 |awk '{printf("%s -\n", $1)}')
+							gdrive="1" ;;
+				"2")		gro=$(find -iname  "*$1*" |sed -e s/.\.// | awk '{printf("%s -\n", $1)}') ;;
+				esac
+		
+        ask_option $default "Update $MSG" "Choose a $MSG binary." required $gro "Cancel" "-" || return 1
+	if [ "$ANSWER_OPTION" = "Cancel" ]; then
+		return 0
+	fi
+	
+	link=$(grep -ri "$ANSWER_OPTION" $utmp/UpdateGA|cut -d " " -f2)
+	clear
+	inform "Downloading "$ANSWER_OPTION""
+	sleep 2
+
+	if [ "$gdrive" = "1" ]; then
+		gdrivedl "$link" > /dev/tty12 2>&1
+	fi
+	
+	inform "Updating $MSG to version $ANSWER_OPTION"
+	ht=$(tar tf $ANSWER_OPTION |grep howto.sh)
+	
+	if [ "$ht" = "howto.sh" ]; then
+		rm -Rf /tmp/howto*
+		tar xvf $ANSWER_OPTION -C /tmp/ > /dev/tty12 2>&1
+		cd /tmp/
+		sudo chmod 777 * > /dev/tty12 2>&1
+		sh howto.sh
+	fi
+
+	if [ ! -f "/tmp/howto.sh" ]; then
+		tar xvf $ANSWER_OPTION -C /usr/local/bin/ > /dev/tty12 2>&1
+		sudo chmod 777 /usr/local/bin/* $utmp/* > /dev/tty12 2>&1
+	else	
+
+	sh howto.sh
+
+	fi
+	
+	return 0
+}
+
+worker_updategroovy ()
+{
+	#UpdateGroovyMame.sh
+	local default=no
+	gro=""
+	gdrive=""
+	utmp="/home/arcade/Update"
+	cd $utmp
+	rm UpdateGMU
+		ask_option $default "Update from" "" required \
+			1 "Online Site" \
+			2 "Local Site" || return
+			case $ANSWER_OPTION in 
+				"1")		gdrivedl "https://drive.google.com/open?id=0B0NB2HYUHHktZmUwVXNucnRVS2c" > /dev/tty12 2>&1
+							gro=$(grep -ri "groovy*" $utmp/UpdateGMU|cut -d " " -f1 |awk '{printf("%s -\n", $1)}')
+							gdrive="1" ;;
+				"2")		gro=$(ls *groovy*|awk '{printf("%s -\n", $1)}') ;;
+				esac
+	
+        ask_option $default "Update GroovyMAME" "Choose a GroovyMAME binary." required $gro "Cancel" "-" || return 1
+	if [ "$ANSWER_OPTION" = "Cancel" ]; then
+		return 0
+	fi
+	link=$(grep -ri "$ANSWER_OPTION" $utmp/UpdateGMU|cut -d " " -f2)
+	clear
+	inform "Downloading "$ANSWER_OPTION""
+	sleep 2
+	#cd $utmp
+	#rm -Rf groov* Groov* howto*
+	if [ $gdrive = "1" ]; then
+		gdrivedl "$link" > /dev/tty12 2>&1
+	fi
+	inform "Updating GroovyMAME to version $ANSWER_OPTION"
+	
+	if [ ! -f "/tmp/howto.sh" ]; then
+		tar xvf $ANSWER_OPTION -C /usr/local/bin/ > /dev/tty12 2>&1
+		sudo chmod 777 /usr/local/bin/* $utmp/* > /dev/tty12 2>&1
+	else	
+
+	sh howto.sh
+
+	fi
+	
+	return 0
+}
+
+
+worker_updateadvmenu ()
+{
+	local default=no
+	gro=""
+	link=""
+	gdrive=""
+	cd /tmp/
+	rm UpdateADV
+	ask_option $default "Update from" "" required \
+			1 "New Web Site" \
+			2 "Old Web Site" || return
+			case $ANSWER_OPTION in 
+				"1")		url="https://googledrive.com/host/0B0NB2HYUHHktRjRaVmVqM2lpalU/" 
+							drive="1" ;;
+				"2")		url="http://groovyarcade.googlecode.com/files/" ;;
+				esac
+	wget $url"UpdateADV" > /dev/tty12 2>&1
+	gro=$(grep -ri "advme*" /tmp/UpdateADV|cut -d " " -f1 |awk '{printf("%s -\n", $1)}')
+        ask_option $default "Update AdvmenuPlus" "Choose an AdvmenuPlus binary." required $gro "Cancel" "-" || return 1
+	if [ "$ANSWER_OPTION" = "Cancel" ]; then
+		return 0
+	fi
+	link=$(grep -ri "$ANSWER_OPTION" /tmp/UpdateADV|cut -d " " -f2)
+	clear
+	inform "Downloading "$ANSWER_OPTION""
+	sleep 5
+	cd /tmp/
+	rm -Rf advmenup* Advmenup* howto*
+	if [ $gdrive = "1" ]; then
+	wget $link > /dev/tty12 2>&1
+	else
+	wget $url$ANSWER_OPTION > /dev/tty12 2>&1
+	fi
+	inform "Updating AdvmenuPlus to version $ANSWER_OPTION"
+	tar xvf $ANSWER_OPTION
+	
+	if [ ! -f "/tmp/howto.sh" ]; then
+		tar xvf $ANSWER_OPTION -C /usr/local/bin/
+		sudo chmod 777 /usr/local/bin/*
+	else	
+	
+	sh howto.sh
+
+	fi
+
+	return 0
+}
+
+worker_updatemenu ()
+{
+	
+	clear
+	cd /tmp/
+	sudo rm -f UpdateGasetup
+	inform "Downloading Gasetup\n"
+	sleep 2
+	gdrivedl "https://drive.google.com/open?id=0B0NB2HYUHHktX2xQUmlJcUdPSXc" > /dev/tty12 2>&1
+	local=$(grep ^VERSION= /opt/gasetup/core/procedures/interactive|sed -e s/^VERSION=\//g)
+	update=$(grep ^VERSION= /tmp/UpdateGasetup|sed -e s/^VERSION=\//g)
+	inform "Local version $local New version $update\n\n"
+	sleep 2
+	if [ $update -gt $local ]; then
+		COPIA=$(sudo cp /tmp/UpdateGasetup /opt/gasetup/core/procedures/interactive)
+		inform "Updating Gasetup to Version $update"
+		sleep 2
+		inform "Gasetup successfully updated! Please reboot Gasetup Menu"
+		sleep 4
+	else
+		inform "Gasetup update failed!\n\n"
+		sleep 2
+	fi
+	return 0
+}
+
+worker_updatescripts ()
+{
+	clear
+	cd /tmp/
+	rm UpdateScripts* howto*
+	wget https://googledrive.com/host/0B0NB2HYUHHktRjRaVmVqM2lpalU/UpdateScripts.tar.bz2 > /dev/tty12 2>&1
+	inform "Updating Scripts $ANSWER_OPTION"
+	tar xvf $ANSWER_OPTION
+	
+	if [ ! -f "/tmp/howto.sh" ]; then
+		tar xvf $ANSWER_OPTION -C /usr/local/bin/
+		sudo chmod 777 /usr/local/bin/*
+	else	
+	
+	sh howto.sh
+
+	fi
+
+	#Updatemenu.sh
+	return 0
+}
+
+worker_updatesystem ()
+{
+		inform "Coming Soon"
+		sleep 4
+		if [ ! -f "/tmp/howto.sh" ]; then
+		tar xvf $ANSWER_OPTION -C /usr/local/bin/
+		sudo chmod 777 /usr/local/bin/*
+			else	
+	
+			sh howto.sh
+
+		fi
+}
+
+worker_joystick_menu() 
+{
+	local default=no
+	while [ 0 = 0 ]; do
+                ask_option $default "Joystick" "" required \
+                       	1 "Wiimote Options" \
+                        2 "OpenPPJOY & Pc2Jamma Setup" \
+                        3 "Ps3/4 Options" \
+                        4 "Xbox Options" \
+						5 "Antimicro Autostart" \
+						6 "Qjoy Autostart" \
+                        7 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+                        "1")            execute worker wiimote_menu     && default=2 ;;
+                        "2")            execute worker openppjoy         && default=3 ;;
+                        "3")            notify "Not Available Yet\n\n" && default=4 ;;
+                        "4")            notify "Not Available Yet\n\n" && default=5 ;;
+                        "5")            execute worker joy2key antimicro && default=7 ;;
+                        "6")            execute worker joy2key qjoypad && default=7 ;;
+                        "7")		return 0 ;;
+                        *) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0
+}
+
+worker_wiimote_menu() 
+{
+	local default=no
+	while [ 0 = 0 ]; do
+                ask_option $default "Wiimote" "" required \
+                       	1 "Wiimote MAC Detect" \
+                        2 "Wiimote Event Change" \
+                        3 "Wiimote Enable/Disable" \
+						4 "...." \
+                        5 "Return to Main" || return
+
+		case $ANSWER_OPTION in 
+                        "1")            execute worker detectwiimote     && default=2 ;;
+                        "2")            execute worker eventwiimote      && default=3 ;;
+                        "3")            execute worker disable_wiimote   && default=4 ;;
+                        "4")            notify "Not Available Yet\n\n" && default=5 ;; ##execute worker none        && default=5 ;;
+                        "5")		return 0 ;;
+                        *) 		notify "Bad option $ANSWER_OPTION given" ;;
+		esac
+	done
+
+	return 0
+}
+	
+worker_eventwiimote ()
+{
+	clear
+	echo "Search Wiimote events:" 
+	EVENT=$(evtestlist | grep "Wiimote" | cut -d":" -f1 )
+	WIIMO=$(evtestlist | grep "Wiimote" | cut -f2)
+	if [ "$EVENT" != "" ]; then
+		inform "$WIIMO $EVENT\n\n"
+		sleep 6
+		nano -R /etc/X11/xorg.conf
+		else
+		inform "Not detected Wiimote\n\n"
+		sleep 2
+	fi
+	
+	return 0
+}
+
+worker_disable_wiimote()
+{
+	ask_option $default "Setup Wiimote Interface" "If you have a problemm with Wifi Disable Wiimote" required "Enable" "-" "Disable" "-"  || return 1
+		
+		if [ "$ANSWER_OPTION" = "Enable" ]; then
+		sudo systemctl enable wiimote 2>>/dev/tty12
+		else
+		sudo systemctl disable wiimote 2>>/dev/tty12
+		fi
+		
+	return 0
+	
+}
+worker_openppjoy ()
+{
+	clear
+	nano -R /etc/modules-load.d/openppjoy.conf
+	return 0
+}
+
+worker_joy2key ()
+{
+	notify "Please Configure $1 from Lxde\n\n\n"
+		ENV=$(grep -e advmenu -e startlxde -e attract /home/arcade/.xinitrc)
+			if [ "$ENV" == "" ]; then
+			ENV="advmenu"
+			fi
+	    [ "$ENV" = advmenu  ] && worker_setup_advmenu $1
+	    [ "$ENV" = attract ] &&  worker_setup_attractmode $1
+	    [ "$ENV" = startlxde ] && worker_setup_lxde  $1
+
+		notify "$1 Activated start with $ENV\n\n\n"
+
+	FOUND=$(grep -e 'antimicro' -e 'qjoypad' /home/arcade/.xinitrc)
+	if [ "$FOUND" != "" ]; then
+	STATUS="Enable"
+	DIS="yes"
+	ask_yesno "$1 is $STATUS, \nDo you want Disable?" || DIS=no
+		if [ "$DIS" = "yes" ]; then
+		sudo sed -ri "s/^$FOUND.*//g" /home/arcade/.xinitrc
+		STATUS="Disable"
+		fi
+	else	
+	STATUS="Disable"
+	fi
+	notify "$1 Daemon is $STATUS\n\n"
+	return 0
+}
+
+worker_detectwiimote ()
+{
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Wiimote detect" "" required \
+		1 "Wiimote 1 MAC "$wa"" \
+		2 "Wiimote 2 MAC "$wb"" \
+		3 "Return to Main" || return
+
+		case $ANSWER_OPTION in
+			"1")	execute worker wiimoteA && default=2 ;;
+			"2")	execute worker wiimoteB && default=3 ;;
+			"3")	return 0 ;;
+			*)	notify "Bad option $ANSWER_OPTION given";;
+		esac
+	done
+	return 0;
+}
+
+worker_foundblue()
+{
+	return
+	
+	}
+
+worker_wiimoteA ()
+{
+	sudo systemctl stop wiimote 2>>/dev/tty12
+	foundblu=$(sudo bt-adapter -i 2>&1 | grep -o 'hci[0-9]')
+		if [ "$foundblu" == "" ]; then
+			inform "Bluetooth no detect or unsupport	\n\n"
+			sleep 2
+			return
+		else
+	
+        clear
+        inform "Detecting Wiimote 1 MAC...\n\n"
+        while [ "$wa" = "" ]; do
+                sleep 1
+                clear
+                wa=$(lswm)
+                sleep 5
+        done
+        inform "Wiimote MAC "$wa"" 
+        sleep 2
+	sudo sed -ri "s/^Wiimote1=.*/Wiimote1=\"$wa\"/" /usr/local/bin/wiimote
+	sudo systemctl start wiimote
+	sudo chmod 777 /dev/uinput
+	sudo chmod 777 /dev/input/*
+	fi
+
+}
+
+worker_wiimoteB ()
+{
+	sudo systemctl stop wiimote 2>>/dev/tty12
+	foundblu=$(sudo bt-adapter -i 2>&1 | grep -o 'hci[0-9]')
+		if [ "$foundblu" == "" ]; then
+			inform "Bluetooth no detect or unsupport	\n\n"
+			sleep 2
+			return
+		else
+        clear
+        inform "Detecting Wiimote 2 MAC...\n\n"
+        while [ "$wb" = "" ]; do
+                sleep 1
+                clear
+                wb=$(lswm)
+                sleep 5
+        done
+        inform "Wiimote MAC "$wb""
+        sleep 2
+	sudo sed -ri "s/^Wiimote2=.*/Wiimote2=\"$wb\"/" /usr/local/bin/wiimote
+	sudo systemctl start wiimote
+	sudo chmod 777 /dev/uinput
+	sudo chmod 777 /dev/input/*
+	fi
+}
+
+
+
+worker_confidiroms ()
+{
+	local default=no
+	emu=""
+	while [ 0 = 0 ]; do
+	ask_option $default "Set emulator's ROM path." "Select an emulator, then set its ROM path." required \
+		1 "GroovyMAME" \
+		2 "Super Nintendo" \
+		3 "Nintendo64" \
+		4 "Nintendo Entertainment System" \
+		5 "Sega Megadrive/Genesis" \
+		6 "Sega Master System" \
+		7 "Atari 2600" \
+		8 "PSX" \
+		9 "PCE-SuperGrafx" \
+		10 "Saturn" \
+		11 "MAME - BIOS" \
+		12 "MAME - Super Nintendo" \
+		13 "MAME - Nintendo64" \
+		14 "MAME - Nintendo Entertainment System" \
+		15 "MAME - Sega Megadrive / Genesis" \
+		16 "MAME - Sega Master System" \
+		17 "MAME - Atari 2600" \
+		18 "MAME - PSX" \
+		19 "MAME - PCE-SuperGrafx" \
+		20 "MAME - Saturn" \
+		21 "MAME - 3DO" \
+		22 "MAME - Jaguar" \
+		23 "MAME - NeoGeoCDZ" \
+		24 "MAME - AmigaCD" \
+		25 "MAME - MegaCD" \
+		26 "MAME - 32X" \
+		27 "Generate All List Attract-Mode" \
+		28 "Set all paths to default" \
+		29 "Return to main" || return
+	
+		case $ANSWER_OPTION in
+		"1")  emu=Mame && default=2 ;;
+		"2")  emu=Snes && default=3 ;;
+		"3")  emu=N64 && default=4 ;;
+		"4")  emu=Nes && default=5 ;;
+		"5")  emu=Mg/Gs && default=6 ;;
+		"6")  emu=Ms && default=7 ;;
+		"7")  emu=Atari && default=8 ;;
+		"8")  emu=Psx && default=9 ;;
+		"9")  emu=Pce && default=10 ;;
+		"10") emu=Saturn && default=11 ;;
+		"11") emu=UME-BIOS && default=12 ;;
+		"12") emu=UME-Snes && default=13 ;;
+		"13") emu=UME-N64 && default=14 ;;
+		"14") emu=UME-Nes && default=15 ;;
+		"15") emu=UME-Mg/Gs && default=16 ;;
+		"16") emu=UME-Ms && default=17 ;;
+		"17") emu=UME-Atari && default=18 ;;
+		"18") emu=UME-Psx && default=19 ;;
+		"19") emu=UME-Pce && default=20 ;;
+		"20") emu=UME-Saturn && default=21 ;;
+		"21") emu=UME-3do && default=22 ;;
+		"22") emu=UME-Jaguar && default=23 ;;
+		"23") emu=UME-Neocd && default=24 ;;
+		"24") emu=UME-Amigacd && default=25 ;;
+		"25") emu=UME-Megacd && default=26 ;;
+		"26") emu=UME-32x && default=27 ;;
+		"27") emu=attlist && default=28 ;;
+		"28") emu=DEFAULT && default=29 ;;
+		"29") return 0 ;;
+		*)	notify "Bad option $ANSWER_OPTION given";;
+		esac
+
+	if [ "$emu" == "DEFAULT" ]; then
+		#sed -ri "s@^rompath.*@rompath                   /home/roms/MAME/roms;@g" /home/arcade/mame.ini
+		sed -ri "s@^rompath.*@rompath                   /home/roms/BIOS_roms;/home/roms/MAME/roms;@g" /home/arcade/mame.ini
+		sed -ri "s@^emulator_roms \"MAME.*@emulator_roms \"MAME\" \"/home/roms/MAME/roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"N64.*@emulator_roms \"N64\" \"/home/roms/N64_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"NES.*@emulator_roms \"NES\" \"/home/roms/NES_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"SNES.*@emulator_roms \"SNES\" \"/home/roms/SNES_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"SegaGenesis.*@emulator_roms \"SegaGenesis\" \"/home/roms/SegaGenesis_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"MasterSystem.*@emulator_roms \"MasterSystem\" \"/home/roms/Master_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"Atari.*@emulator_roms \"Atari2600\" \"/home/roms/Atari2600_roms\"@g" /home/arcade/.advance/advmenup.rc
+		
+		sed -ri "s@^emulator_roms \"PSX.*@emulator_roms \"PSX\" \"/home/roms/PSX_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"PCEngine-Supergrafx.*@emulator_roms \"PCEngine-Supergrafx\" \"/home/roms/PCE_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"Saturn.*@emulator_roms \"Saturn\" \"/home/roms/Saturn_roms\"@g" /home/arcade/.advance/advmenup.rc
+		
+		sed -ri "s@^emulator_roms \"UME-N64.*@emulator_roms \"UME-N64\" \"/home/roms/N64_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-NES.*@emulator_roms \"UME-NES\" \"/home/roms/NES_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-SNES.*@emulator_roms \"UME-SNES\" \"/home/roms/SNES_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-SegaGenesis.*@emulator_roms \"UME-SegaGenesis\" \"/home/roms/SegaGenesis_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-Sega32X.*@emulator_roms \"UME-Sega32X\" \"/home/roms/32X_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-SegaMegaCD.*@emulator_roms \"UME-SegaMegaCD\" \"/home/roms/MegaCD_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-MasterSystem.*@emulator_roms \"UME-MasterSystem\" \"/home/roms/Master_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-Atari.*@emulator_roms \"UME-Atari2600\" \"/home/roms/Atari2600_roms\"@g" /home/arcade/.advance/advmenup.rc
+		
+		sed -ri "s@^emulator_roms \"UME-PCEngine-Supergrafx.*@emulator_roms \"UME-PCEngine-Supergrafx\" \"/home/roms/PCE_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-3DO.*@emulator_roms \"UME-3DO\" \"/home/roms/3DO_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-PSX.*@emulator_roms \"UME-PSX\" \"/home/roms/PSX_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-Saturn.*@emulator_roms \"UME-Saturn\" \"/home/roms/Saturn_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-NeoGeoCDZ.*@emulator_roms \"UME-NeoGeoCDZ\" \"/home/roms/NeoCD_roms\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_roms \"UME-AmigaCD.*@emulator_roms \"UME-AmigaCD\" \"/home/roms/AmigaCD_roms\"@g" /home/arcade/.advance/advmenup.rc
+				
+		sed -ri "s@^rompath.*@rompath              \/home/roms/MAME/roms\/@g"	/home/arcade/.attract/emulators/MAME.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/N64_roms\/@g"	/home/arcade/.attract/emulators/N64.cfg /home/arcade/.attract/emulators/UME-N64.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/NES_roms\/@g"	/home/arcade/.attract/emulators/NES.cfg /home/arcade/.attract/emulators/UME-NES.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/SNES_roms\/@g"	/home/arcade/.attract/emulators/SNES.cfg /home/arcade/.attract/emulators/UME-SNES.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/SegaGenesis_roms\/@g"	/home/arcade/.attract/emulators/SegaGenesis.cfg /home/arcade/.attract/emulators/UME-SegaGenesis.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/Master_roms\/@g"	/home/arcade/.attract/emulators/MasterSystem.cfg /home/arcade/.attract/emulators/UME-MasterSystem.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/Atari2600_roms\/@g"	/home/arcade/.attract/emulators/Atari2600.cfg /home/arcade/.attract/emulators/UME-Atari2600.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/PSX_roms\/@g"	/home/arcade/.attract/emulators/PSX.cfg /home/arcade/.attract/emulators/UME-PSX.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/PCEngine-Supergrafx_roms\/@g"	/home/arcade/.attract/emulators/PCEngine-Supergrafx.cfg /home/arcade/.attract/emulators/UME-PCEngine-Supergrafx.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/Saturn_roms\/@g"	/home/arcade/.attract/emulators/Saturn.cfg /home/arcade/.attract/emulators/UME-Saturn.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/3DO_roms\/@g" /home/arcade/.attract/emulators/UME-3DO.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/NeoCD_roms\/@g" /home/arcade/.attract/emulators/UME-NeoGeoCDZ.cfg
+		sed -ri "s@^rompath.*@rompath              \/home/roms/AmigaCD_roms\/@g" /home/arcade/.attract/emulators/UME-AmigaCD.cfg
+		
+		su arcade attlist.sh &> /dev/tty12
+		
+		notify "All ROM paths are now set to default."
+	
+	fi
+	
+	if [ "$emu" == "attlist" ]; then
+		su arcade attlist.sh &> /dev/tty12
+	fi 
+			
+	if [ "$emu" != "attlist" -a "$emu" != "DEFAULT" ]; then
+		execute worker SelectRS $emu roms
+	fi
+done
+	return 0
+}	
+	
+worker_confidirsnaps ()
+{
+	local default=no
+	emu=""
+	while [ 0 = 0 ]; do
+	ask_option $default "Set emulator's Snap path." "Select an emulator, then set its Snap path." required \
+		1 "GroovyMAME" \
+		2 "Super Nintendo" \
+		3 "Nintendo64" \
+		4 "Nintendo Entertainment System" \
+		5 "Sega Megadrive/Genesis" \
+		6 "Sega Master System" \
+		7 "Atari 2600" \
+		8 "PSX" \
+		9 "PCE-SuperGrafx" \
+		10 "Saturn" \
+		11 "MAME - Super Nintendo" \
+		12 "MAME - Nintendo64" \
+		13 "MAME - Nintendo Entertainment System" \
+		14 "MAME - Sega Megadrive / Genesis" \
+		15 "MAME - Sega Master System" \
+		16 "MAME - Atari 2600" \
+		17 "MAME - PSX" \
+		18 "MAME - PCE-SuperGrafx" \
+		19 "MAME - Saturn" \
+		20 "MAME - 3DO" \
+		21 "MAME - Jaguar" \
+		22 "MAME - NeoGeoCDZ" \
+		23 "MAME - AmigaCD" \
+		24 "MAME - MegaCD" \
+		25 "MAME - 32X" \
+		26 "Set all paths to default" \
+		27 "Return to main" || return
+	
+		case $ANSWER_OPTION in
+		"1")  emu=Mame && default=2 ;;
+		"2")  emu=Snes && default=3 ;;
+		"3")  emu=N64 && default=4 ;;
+		"4")  emu=Nes && default=5 ;;
+		"5")  emu=Mg/Gs && default=6 ;;
+		"6")  emu=Ms && default=7 ;;
+		"7")  emu=Atari && default=8 ;;
+		"8")  emu=Psx && default=9 ;;
+		"9")  emu=Pce && default=10 ;;
+		"10") emu=Saturn && default=11 ;;
+		"11") emu=UME-Snes && default=12 ;;
+		"12") emu=UME-N64 && default=13 ;;
+		"13") emu=UME-Nes && default=14 ;;
+		"14") emu=UME-Mg/Gs && default=15 ;;
+		"15") emu=UME-Ms && default=16 ;;
+		"16") emu=UME-Atari && default=17 ;;
+		"17") emu=UME-Psx && default=18 ;;
+		"18") emu=UME-Pce && default=19 ;;
+		"19") emu=UME-Saturn && default=20 ;;
+		"20") emu=UME-3do && default=21 ;;
+		"21") emu=UME-Jaguar && default=22 ;;
+		"22") emu=UME-Neocd && default=23 ;;
+		"23") emu=UME-Amigacd && default=24 ;;
+		"24") emu=UME-Megacd && default=25 ;;
+		"25") emu=UME-32x && default=26 ;;
+		"26") emu=DEFAULT && default=27 ;;
+		"27") return 0 ;;
+		*)	notify "Bad option $ANSWER_OPTION given";;
+		esac
+		
+	if [ "$emu" == "DEFAULT" ]; then
+		sed -ri "s@^emulator_altss \"MAME.*@emulator_altss \"MAME\" \"/home/roms/MAME/snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"N64.*@emulator_altss \"N64\" \"/home/roms/N64_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"NES.*@emulator_altss \"NES\" \"/home/roms/NES_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"SNES.*@emulator_altss \"SNES\" \"/home/roms/SNES_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"SegaGenesis.*@emulator_altss \"SegaGenesis\" \"/home/roms/SegaGenesis_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"MasterSystem.*@emulator_altss \"MasterSystem\" \"/home/roms/Master_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"Atari.*@emulator_altss \"Atari2600\" \"/home/roms/Atari2600_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		
+		sed -ri "s@^emulator_altss \"PSX.*@emulator_altss \"PSX\" \"/home/roms/PSX_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"PCEngine-Supergrafx.*@emulator_altss \"PCEngine-Supergrafx\" \"/home/roms/PCE_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"Saturn.*@emulator_altss \"Saturn\" \"/home/roms/Saturn_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		
+		sed -ri "s@^emulator_altss \"UME-N64.*@emulator_altss \"UME-N64\" \"/home/roms/N64_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-NES.*@emulator_altss \"UME-NES\" \"/home/roms/NES_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-SNES.*@emulator_altss \"UME-SNES\" \"/home/roms/SNES_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-SegaGenesis.*@emulator_altss \"UME-SegaGenesis\" \"/home/roms/SegaGenesis_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-SegaMegaCD.*@emulator_altss \"UME-SegaMegaCD\" \"/home/roms/MegaCD_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-Sega32X.*@emulator_altss \"UME-Sega32X\" \"/home/roms/32X_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		
+		sed -ri "s@^emulator_altss \"UME-MasterSystem.*@emulator_altss \"UME-MasterSystem\" \"/home/roms/Master_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-Atari.*@emulator_altss \"UME-Atari2600\" \"/home/roms/Atari2600_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		
+		sed -ri "s@^emulator_altss \"UME-PCEngine-Supergrafx.*@emulator_altss \"UME-PCEngine-Supergrafx\" \"/home/roms/PCE_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-3DO.*@emulator_altss \"UME-3DO\" \"/home/roms/3DO_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-PSX.*@emulator_altss \"UME-PSX\" \"/home/roms/PSX_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-Saturn.*@emulator_altss \"UME-Saturn\" \"/home/roms/Saturn_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-NeoGeoCDZ.*@emulator_altss \"UME-NeoGeoCDZ\" \"/home/roms/NeoCD_snaps\"@g" /home/arcade/.advance/advmenup.rc
+		sed -ri "s@^emulator_altss \"UME-AmigaCD.*@emulator_altss \"UME-AmigaCD\" \"/home/roms/AmigaCD_snaps\"@g" /home/arcade/.advance/advmenup.rc
+						
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/MAME/snaps\/@g"	/home/arcade/.attract/emulators/MAME.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/N64_snaps\/@g"	/home/arcade/.attract/emulators/N64.cfg /home/arcade/.attract/emulators/UME-N64.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/NES_snaps\/@g"	/home/arcade/.attract/emulators/NES.cfg /home/arcade/.attract/emulators/UME-NES.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/SNES_snaps\/@g"	/home/arcade/.attract/emulators/SNES.cfg /home/arcade/.attract/emulators/UME-SNES.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/SegaGenesis_snaps\/@g"	/home/arcade/.attract/emulators/SegaGenesis.cfg /home/arcade/.attract/emulators/UME-SegaGenesis.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/Master_snaps\/@g"	/home/arcade/.attract/emulators/MasterSystem.cfg /home/arcade/.attract/emulators/UME-MasterSystem.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/Atari2600_snaps\/@g"	/home/arcade/.attract/emulators/Atari2600.cfg /home/arcade/.attract/emulators/UME-Atari2600.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/PSX_snaps\/@g"	/home/arcade/.attract/emulators/PSX.cfg /home/arcade/.attract/emulators/UME-PSX.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/PCEngine-Supergrafx_snaps\/@g"	/home/arcade/.attract/emulators/PCEngine-Supergrafx.cfg /home/arcade/.attract/emulators/UME-PCEngine-Supergrafx.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/Saturn_snaps\/@g"	/home/arcade/.attract/emulators/Saturn.cfg /home/arcade/.attract/emulators/UME-Saturn.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/3DO_snaps\/@g" /home/arcade/.attract/emulators/UME-3DO.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/NeoCD_snaps\/@g" /home/arcade/.attract/emulators/UME-NeoGeoCDZ.cfg
+		sed -ri "s@^artwork    screen.*@artwork    screen              \/home/roms/AmigaCD_snaps\/@g" /home/arcade/.attract/emulators/UME-AmigaCD.cfg
+		
+		notify "All Snap paths are now set to default."
+		
+	fi
+	
+	if [ "$emu" != "DEFAULT" ]; then
+		execute worker SelectRS $emu snaps
+	fi
+done
+	return 0
+}
+
+worker_MakeRSCache ()
+{
+	CACHE=""
+	if [ -f "/home/arcade/.config/cache$1" ]; then
+		ask_yesno "Previous Cache Detected, Do you want use?" || CACHE=no
+		if [ "$CACHE" = "no" ]; then
+			sudo rm /home/arcade/.config/cache$1
+		else
+			if [ "$1" = roms ]; then
+				execute worker confidiroms
+				return 0
+				else
+				execute worker confidirsnaps
+				return 0
+			fi
+		fi
+	fi	
+	
+	if [ "$1" = roms ]; then
+	ask_option $default "How to Search" "Choose an Options" required "Normal path search (filter: *roms)" "-" "Full path search  (filter: *roms*)" "-" || return 0
+	
+	case $ANSWER_OPTION in
+	"Normal path search (filter: *roms)")
+		inform "Searching your system for potential ROMs paths..."
+		sleep 2
+		if [ ! -f "/home/arcade/.config/cacheroms" ]; then
+			dir=$(find /media/ /home/roms/ -type d -iname '*roms*'|awk '{printf("%s -\n", $1)}' >> /home/arcade/.config/cacheroms)
+		fi;;
+		
+	"Full path search  (filter: *roms*)")
+		inform "Searching your system for potential ROMs paths..."
+		sleep 2
+		if [ ! -f "/home/arcade/.config/cacheroms" ]; then
+			dir=$(find /media/ /home/roms/ -type d -iwholename '*roms*'|sed 's/ /·/g' |awk '{printf("%s -\n", $0)}' >> /home/arcade/.config/cacheroms)
+		fi;;
+		
+	*)	notify "Bad option $ANSWER_OPTION given";;
+	esac
+     
+     execute worker confidiroms
+
+	else 
+	ask_option $default "How to Search" "Choose an Options" required "Normal path search (filter: *snaps)" "-" "Full path search  (filter: *snaps*)" "-" || return 0
+		
+	case $ANSWER_OPTION in
+	"Normal path search (filter: *snaps)")
+		inform "Searching your system for potential Snaps paths..."
+		sleep 2
+		if [ ! -f "/home/arcade/.config/cachesnaps" ]; then
+			dir=$(find /media/ /home/roms/ -type d -iname '*snap*'|awk '{printf("%s -\n", $1)}' >> /home/arcade/.config/cachesnaps)
+		fi;;
+	"Full path search  (filter: *snaps*)")
+		inform "Searching your system for potential Snaps paths..."
+		sleep 2
+		if [ ! -f "/home/arcade/.config/cachesnaps" ]; then
+			dir=$(find /media/ /home/roms/ -type d -iwholename '*snap*'|sed 's/ /·/g' |awk '{printf("%s -\n", $0)}' >> /home/arcade/.config/cachesnaps)
+		fi;;
+			
+	*)	notify "Bad option $ANSWER_OPTION given";;
+	esac
+	
+	execute worker confidirsnaps
+	
+	return 0
+	
+	fi
+	}
+
+worker_SelectRS ()
+
+{
+	if [ "$2" = roms ]; then
+	
+		dir=$(sudo cat /home/arcade/.config/cacheroms)
+
+		ask_option $default "Potential ROM paths found." "Choose a ROM path for "$emu"" required $dir "Cancel" "-" || return 0
+
+			if [ "$ANSWER_OPTION" = "Cancel" ]; then
+				return 0
+			fi
+		clear
+		inform "Adding new ROM path "$ANSWER_OPTION""
+		sleep 1
+		romdir.sh $ANSWER_OPTION $1
+		return 0
+	
+	else 
+	
+		dir=$(cat /home/arcade/.config/cachesnaps)
+		
+		ask_option $default "Potential Snaps paths found." "Choose a Snaps path for "$emu"" required $dir "Cancel" "-" || return 0
+		
+			if [ "$ANSWER_OPTION" = "Cancel" ]; then
+				return 0
+			fi
+		clear
+		inform "Added new Snaps path "$ANSWER_OPTION""
+		sleep 1
+		snapdir.sh $ANSWER_OPTION $1
+		return 0
+	fi
+	}
+
+worker_video_syslinux()
+{
+	MODO=""
+	mount -t ext2 -a
+	GRUB_FILE=/boot/syslinux/syslinux.cfg
+	if [ ! -f "/boot/syslinux/syslinux.cfg" ]; then
+		notify "You can only change the video boot-syslinux on an installed system. Not in the LiveCD."
+		return 0
+	fi
+	
+	local default=no
+	while [ 0 = 0 ]; do
+		ask_option $default "Change video boot-syslinux" "Select the connector you want to use for video output on boot, as well as the frequency (kHz)" required \
+		1 "[DVI-1 15khz] " \
+		2 "[VGA-1 15khz] " \
+		3 "[DVI-2 15khz] " \
+		4 "[VGA-2 15khz] " \
+		5 "[NTSC DVI-1 15khz (60 Hz only)] " \
+		6 "[NTSC VGA-1 15khz (60 Hz only)] " \
+		7 "[PAL DVI-1 15khz (50 Hz only)] " \
+		8 "[PAL VGA-1 15khz (50 Hz only)] " \
+		9 "[SVGA/VGA/LCD Monitor] " \
+		10 "[DVI-1 15khz pci=nomsi (Use for buggy motherboards)] " \
+		11 "[VGA-1 15khz pci=nomsi (Use for buggy motherboards)] " \
+		12 "[DVI-1 25khz] " \
+		13 "[VGA-1 25khz] " \
+		14 "[DVI-2 25khz] " \
+		15 "[VGA-2 25khz] " \
+		16 "[DVI-1 31khz] " \
+		17 "[VGA-1 31khz] " \
+		18 "[DVI-2 31khz] " \
+		19 "[VGA-2 31khz] " \
+		20 "Return to Main" || return
+
+		case $ANSWER_OPTION in
+			"1")	MODO="DVI-I-1:640x480ec" && default=20 ;;
+			"2")	MODO="VGA-1:640x480ec"  && default=20 ;;
+			"3")	MODO="DVI-I-2:640x480ec" && default=20 ;;
+			"4")	MODO="VGA-2:640x480ec" && default=20 ;;
+			"5")	MODO="DVI-I-1:720x480ec" && default=20 ;;
+			"6")	MODO="VGA-1:720x480ec" && default=20 ;;
+			"7")	MODO="DVI-I-1:768x576ec" && default=20 ;;
+			"8")	MODO="VGA-1:768x576ec" && default=20 ;;
+			"9")	MODO="" && default=20 ;;
+			"10")	MODO="DVI-I-1:640x480ec pci=nomsi" && default=20 ;;
+			"11")	MODO="VGA-1:640x480ec pci=nomsi" && default=20 ;;
+			"12")	MODO="DVI-I-1:512x384ez" && default=20 ;;
+			"13")	MODO="VGA-1:512x384ez"  && default=20 ;;
+			"14")	MODO="DVI-I-2:512x384ez" && default=20 ;;
+			"15")	MODO="VGA-2:512x384ez" && default=20 ;;
+			"16")	MODO="DVI-I-1:640x480ey" && default=20 ;;
+			"17")	MODO="VGA-1:640x480ey"  && default=20 ;;
+			"18")	MODO="DVI-I-2:640x480ey" && default=20 ;;
+			"19")	MODO="VGA-2:640x480ey" && default=20 ;;
+			"20")	return 0 ;;
+			*)	notify "Bad option $ANSWER_OPTION given";;
+		esac
+
+		if [ "$ANSWER_OPTION" != "10" ] && [ "$ANSWER_OPTION" != "11" ]; then
+			sudo sed -ri "s/pci=.*//" /boot/syslinux/syslinux.cfg
+		fi
+		
+		VIDEO=$(cat /boot/syslinux/syslinux.cfg | grep video=)
+		if [ "$VIDEO" = "" ]; then
+			sudo sed -ri "s/vga=.*/vga=0x311 video=/" /boot/syslinux/syslinux.cfg
+		fi
+				
+		sudo sed -ri "s/video=.*/video=$MODO/" /boot/syslinux/syslinux.cfg
+
+	done
+	return 0;
+}

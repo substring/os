@@ -1,0 +1,69 @@
+######################################################
+# Layout "vertical" - AdvMenuPlus 2012.11.27
+#
+# daesdae 
+######################################################
+
+# ORIENTACION
+###############
+orientation flip_xy mirror_y
+
+# FONDO
+#########
+background_image_path vertical.png
+background_color 
+
+# HELP
+########
+help_image_path none
+
+# START
+#########
+start_image_path none
+
+# LISTADO
+###########
+list_pos_size 34 179 267 414
+list_font_path UnDinaru.ttf
+list_font_size 28
+list_font_color 6f2618
+list_font_select_color ffb66e 6f2618 0.4
+list_rows 10
+list_cols 
+list_selected_pos 
+list_align center
+list_diagonal 
+
+# SCROLL - BARRA DE DESPLAZAMIENTO VERTICAL
+###########################################
+scroll_pos_size none
+scroll_color none none
+
+# IMAGENES DE JUEGO SELECCIONADO
+##################################
+win_snaps 339 231 235 315
+win_color none none
+
+# BARRAS DE INFORMACION/TEXTO
+###############################
+bar_info_1 34 92 535 28
+bar_info_1_font UnDinaru.ttf
+bar_info_1_color ffd3a8
+bar_info_1_text "%description% (%manufacturer%, %year%)"
+bar_info_1_align left
+
+bar_info_2 32 648 269 22
+bar_info_2_font UnDinaruLight.ttf
+bar_info_2_color ffd3a8
+bar_info_2_text "Juego %selected% de %games%"
+bar_info_2_align center
+
+# MENU
+########
+menu_font_path 
+menu_font_size 
+menu_title_color 6f2618 eb9349
+menu_font_color 6f2618 eb9349
+menu_font_select_color ffb66e 6f2618
+
+

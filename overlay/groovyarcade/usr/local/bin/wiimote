@@ -1,0 +1,25 @@
+#!/bin/bash 
+
+# Author: Ves
+# Date:   14/03/11
+# Version 0.2 for systemd
+# Created for GroovyArcade
+# You must change the parameters wiimote1 and wiimote2
+# It uses lswm to identify your wiimote
+
+Wiimote1="00:19:1D:00:00:00"
+Wiimote2="00:1E:A9:00:00:00"
+
+#	blue=$(hciconfig)
+
+#	if [ "$blue" = "" ]; then
+
+#	echo no hay $blue
+
+#	else
+
+	echo Starting Wiimote $blue
+	wminput -d -c ir_ptr $Wiimote1 >/dev/null 2>/dev/null &
+	sleep 1
+	wminput -d -c ir_ptr.2 $Wiimote2 >/dev/null 2>/dev/null &
+#	fi	

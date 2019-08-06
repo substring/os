@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# GROOVYARCADE details
+export GA_VERSION=test
+if [[ ! -z ${CI_COMMIT_TAG} ]] ; then
+  GA_VERSION=${CI_COMMIT_TAG}
+elif [[ ! -z ${CI_COMMIT_REF_SLUG} ]] ; then
+  GA_VERSION=${CI_COMMIT_REF_SLUG}
+fi
+
+# ARCHLINUX version
+export ARCH_VERSION=2019.07.01
+export ARCH_URL=http://archlinux.mirrors.ovh.net/archlinux
+
+# GroovyArcade Pacman repo
+export PACMAN_REPO=https://github.com/substring/packages/releases/download/stable

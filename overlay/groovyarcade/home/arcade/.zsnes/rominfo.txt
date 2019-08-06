@@ -1,0 +1,7 @@
+This is the info for the last game you ran.
+
+File: Mario is Missing! (U).smc Header: No
+Mario is Missing          TYPE:NORMAL   
+INTERLEAVED:No               CHKSUM:OK  
+VIDEO:NTSC    BANK:Lo     CRC32:E51A3FCD
+                                        

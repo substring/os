@@ -1,0 +1,102 @@
+diff --git a/configs/releng/build.sh b/configs/releng/build.sh
+index 659e8de..17fc481 100755
+--- a/configs/releng/build.sh
++++ b/configs/releng/build.sh
+@@ -10,6 +10,9 @@ iso_version=$(date +%Y.%m.%d)
+ install_dir=arch
+ work_dir=work
+ out_dir=out
++kernel=linux
++vmlinuz_ext=
++intramfs_file=archiso.img
+ gpg_key=
+ 
+ verbose=""
+@@ -38,6 +41,8 @@ _usage ()
+     echo "                        Default: ${work_dir}"
+     echo "    -o <out_dir>       Set the output directory"
+     echo "                        Default: ${out_dir}"
++    echo "    -k <kernel>        Set the wanted kernel"
++    echo "                        Default: ${kernel}"
+     echo "    -v                 Enable verbose output"
+     echo "    -h                 This help message"
+     exit ${1}
+@@ -87,7 +92,7 @@ make_setup_mkinitcpio() {
+       gpg --export ${gpg_key} >${work_dir}/gpgkey
+       exec 17<>${work_dir}/gpgkey
+     fi
+-    ARCHISO_GNUPG_FD=${gpg_key:+17} mkarchiso ${verbose} -w "${work_dir}/x86_64" -C "${work_dir}/pacman.conf" -D "${install_dir}" -r 'mkinitcpio -c /etc/mkinitcpio-archiso.conf -k /boot/vmlinuz-linux -g /boot/archiso.img' run
++    ARCHISO_GNUPG_FD=${gpg_key:+17} mkarchiso ${verbose} -w "${work_dir}/x86_64" -C "${work_dir}/pacman.conf" -D "${install_dir}" -r 'mkinitcpio -c /etc/mkinitcpio-archiso.conf -k /boot/vmlinuz'${vmlinuz_ext}' -g /boot/'${initramfs_file} run
+     if [[ ${gpg_key} ]]; then
+       exec 17<&-
+     fi
+@@ -110,8 +115,8 @@ make_customize_airootfs() {
+ # Prepare kernel/initramfs ${install_dir}/boot/
+ make_boot() {
+     mkdir -p ${work_dir}/iso/${install_dir}/boot/x86_64
+-    cp ${work_dir}/x86_64/airootfs/boot/archiso.img ${work_dir}/iso/${install_dir}/boot/x86_64/archiso.img
+-    cp ${work_dir}/x86_64/airootfs/boot/vmlinuz-linux ${work_dir}/iso/${install_dir}/boot/x86_64/vmlinuz
++    cp ${work_dir}/x86_64/airootfs/boot/${initramfs_file} ${work_dir}/iso/${install_dir}/boot/x86_64/${initramfs_file}
++    cp ${work_dir}/x86_64/airootfs/boot/vmlinuz${vmlinuz_ext} ${work_dir}/iso/${install_dir}/boot/x86_64/
+ }
+ 
+ # Add other aditional/extra files to ${install_dir}/boot/
+@@ -126,7 +131,7 @@ make_boot_extra() {
+ 
+ # Prepare /${install_dir}/boot/syslinux
+ make_syslinux() {
+-    _uname_r=$(file -b ${work_dir}/x86_64/airootfs/boot/vmlinuz-linux| awk 'f{print;f=0} /version/{f=1}' RS=' ')
++    _uname_r=$(file -b ${work_dir}/x86_64/airootfs/boot/vmlinuz${vmlinuz_ext}| awk 'f{print;f=0} /version/{f=1}' RS=' ')
+     mkdir -p ${work_dir}/iso/${install_dir}/boot/syslinux
+     for _cfg in ${script_path}/syslinux/*.cfg; do
+         sed "s|%ARCHISO_LABEL%|${iso_label}|g;
+@@ -176,15 +181,15 @@ make_efi() {
+ # Prepare efiboot.img::/EFI for "El Torito" EFI boot mode
+ make_efiboot() {
+     mkdir -p ${work_dir}/iso/EFI/archiso
+-    truncate -s 64M ${work_dir}/iso/EFI/archiso/efiboot.img
++    truncate -s 128M ${work_dir}/iso/EFI/archiso/efiboot.img
+     mkfs.fat -n ARCHISO_EFI ${work_dir}/iso/EFI/archiso/efiboot.img
+ 
+     mkdir -p ${work_dir}/efiboot
+     mount ${work_dir}/iso/EFI/archiso/efiboot.img ${work_dir}/efiboot
+ 
+     mkdir -p ${work_dir}/efiboot/EFI/archiso
+-    cp ${work_dir}/iso/${install_dir}/boot/x86_64/vmlinuz ${work_dir}/efiboot/EFI/archiso/vmlinuz.efi
+-    cp ${work_dir}/iso/${install_dir}/boot/x86_64/archiso.img ${work_dir}/efiboot/EFI/archiso/archiso.img
++    cp ${work_dir}/iso/${install_dir}/boot/x86_64/vmlinuz${vmlinuz_ext} ${work_dir}/efiboot/EFI/archiso/vmlinuz.efi
++    cp ${work_dir}/iso/${install_dir}/boot/x86_64/${initramfs_file} ${work_dir}/efiboot/EFI/archiso/${initramfs_file}
+ 
+     cp ${work_dir}/iso/${install_dir}/boot/intel_ucode.img ${work_dir}/efiboot/EFI/archiso/intel_ucode.img
+     cp ${work_dir}/iso/${install_dir}/boot/amd_ucode.img ${work_dir}/efiboot/EFI/archiso/amd_ucode.img
+@@ -229,7 +234,7 @@ if [[ ${EUID} -ne 0 ]]; then
+     _usage 1
+ fi
+ 
+-while getopts 'N:V:L:P:A:D:w:o:g:vh' arg; do
++while getopts 'N:V:L:P:A:D:w:o:k:g:vh' arg; do
+     case "${arg}" in
+         N) iso_name="${OPTARG}" ;;
+         V) iso_version="${OPTARG}" ;;
+@@ -239,6 +244,11 @@ while getopts 'N:V:L:P:A:D:w:o:g:vh' arg; do
+         D) install_dir="${OPTARG}" ;;
+         w) work_dir="${OPTARG}" ;;
+         o) out_dir="${OPTARG}" ;;
++        k)
++           kernel="${OPTARG}"
++           vmlinuz_ext="-${kernel}"
++           initramfs_file="initramfs-${kernel}.img"
++           ;;
+         g) gpg_key="${OPTARG}" ;;
+         v) verbose="-v" ;;
+         h) _usage 0 ;;
+@@ -254,8 +264,8 @@ mkdir -p ${work_dir}
+ run_once make_pacman_conf
+ run_once make_basefs
+ run_once make_packages
+-run_once make_setup_mkinitcpio
+ run_once make_customize_airootfs
++run_once make_setup_mkinitcpio
+ run_once make_boot
+ run_once make_boot_extra
+ run_once make_syslinux

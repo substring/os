@@ -1,0 +1,96 @@
+######################################################
+# Layout "Retrovicio 2º aniversario".
+#
+# Adaptado para AdvMenuPlus 2012.11.27 del "Layout
+# para MALA - Retrovicio 2º aniversario" de Lord Hiryu.
+#
+# daesdae 
+######################################################
+
+# ORIENTACION
+###############
+orientation 
+
+
+# FONDO
+#########
+background_image_path rv2.png
+
+background_color 
+
+
+# HELP
+########
+help_image_path none
+
+
+# START
+#########
+#start_image_path rv2.mng
+
+
+# LISTADO
+###########
+
+list_pos_size 21 158 472 531
+
+list_font_path amiga4.ttf
+list_font_size 20
+
+list_font_color 8f8b51
+list_font_select_color f0c413
+#list_font_select_color f0c413 2483bb
+
+list_rows 11
+list_cols 
+
+list_selected_pos 3
+
+list_align center
+
+list_diagonal 
+
+
+# SCROLL - BARRA DE DESPLAZAMIENTO VERTICAL
+###########################################
+scroll_pos_size
+scroll_color 
+
+
+# IMAGENES DE JUEGO SELECCIONADO
+##################################
+win_snaps 530 264 469 308
+win_color none none
+
+
+# BARRAS DE INFORMACION/TEXTO
+###############################
+#barra info 1 - Emulador
+bar_info_1 657 55 348 22
+bar_info_1_font arialb.ttf
+bar_info_1_color f8c107
+bar_info_1_text "%name%"
+bar_info_1_align left
+
+#barra info 2 - Fabricante y año
+bar_info_2 530 600 469 12
+bar_info_2_font amiga4.ttf
+bar_info_2_color 83b1cb
+bar_info_2_text "%manufacturer%, %year%"
+bar_info_2_align center
+
+#barra info 3 - Juego de Juegos
+bar_info_3 530 630 469 14
+bar_info_3_font amiga4.ttf
+bar_info_3_color f8c107
+bar_info_3_text "All Games: %selected% of %games%"
+bar_info_3_align center
+
+
+# MENU
+########
+menu_font_path arialb.ttf
+menu_font_size 22
+menu_font_color 7c9aae 0c5095
+menu_font_select_color f8c107 2486bd
+menu_title_color 7c9aae 0c5095

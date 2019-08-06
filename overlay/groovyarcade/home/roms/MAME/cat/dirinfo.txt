@@ -1,0 +1,2 @@
+The "cat" directory is the default place to store any types of catalogs -- such
+as mameinfo.dat, history.dat (MAME) or sysinfo.dat (MESS).

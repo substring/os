@@ -1,0 +1,3 @@
+#!/bin/sh
+/opt/gasetup/gasetup.sh -p interactive
+

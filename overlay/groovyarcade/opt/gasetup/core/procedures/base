@@ -1,0 +1,162 @@
+#!/bin/bash
+
+# this procedure is meant to be inherited from
+#var_DEFAULTFS="/boot:32:ext2:+ swap:1024:swap /:7500:ext3 /home:*:ext3"
+var_DEFAULTFS="/:10000:ext4:+ swap:1024:swap /home:*:ext3"
+var_TARGET_DIR="/groovyarcade" # When overriding this, do _not_ add a trailing /.  It's not needed and maybe you could even break something
+var_RUNTIME_REPOSITORIES= # array like this ('name1' 'location of repo 1' ['name2' 'location of repo2',..])
+var_RUNTIME_PACKAGES=
+var_PKG_FILE=$RUNTIME_DIR/aif-package-list # not used by default in base/interactive. can be used by custom procedures or profiles for the automatic procedure
+var_MIRRORLIST="/etc/pacman.d/mirrorlist"
+var_UI_TYPE="dia" # set to cli or dia for dialog
+var_ARCH=`uname -m` #i686 or x86_64. NOTE: this assumes you want to install the same arch as the installation environment you're using. maybe we could decouple those someday..
+[ -z "$var_ARCH" ] && die_error "Could not determine your architecture"
+grubmenu="$var_TARGET_DIR$grubmenu"
+
+###### Phases ( can be overridden by more specific procedures) ######
+phase_preparation=(\
+	configure \
+	intro \
+	sysprep \
+	select_source \
+	runtime_network \
+	runtime_repositories \
+	runtime_packages)
+
+phase_basics=(\
+	set_clock \
+	prepare_disks)
+
+phase_system=(\
+	package_list \
+	install_packages \
+	configure_system \
+	install_bootloader)
+
+phase_finish=(msg_report)
+
+
+
+###### Workers ( can be overridden by more specific procedures) ######
+worker_intro ()
+{
+	ask_yesno "This is a low-interactivity 'common defaults' installation, not meant for direct invocation.  Do you really want to do this?  We may overwrite your data."
+	if [ $? -gt 0 ]
+	then
+		die_error "User aborted base profile execution"
+	fi
+}
+
+
+worker_sysprep ()
+{
+	mount -o remount,rw / &>/dev/null
+}
+
+
+worker_configure ()
+{
+	var_UI_TYPE=${arg_ui_type:-cli}
+	ui_init
+}
+
+
+worker_select_source ()
+{
+	var_PKG_SOURCE_TYPE='cd'
+	var_FILE_URL="file:///src/core/pkg"
+	var_SYNC_URL= # optional, points to a repository string something like ftp://ftp.belnet.be/mirror/archlinux.org/$repo/os/i686 (eg the same format as what you find in /etc/pacman.conf)
+}
+
+
+worker_runtime_network ()
+{
+	#override if needed
+	true
+}
+
+
+worker_runtime_repositories ()
+{
+	for i in `seq 0 $((${#var_RUNTIME_REPOSITORIES[@]}/2-1))`
+	do
+		repo=${var_RUNTIME_REPOSITORIES[$(($i*2))]}
+		location=${var_RUNTIME_REPOSITORIES[$(($i*2+1))]}
+		list_pacman_repos runtime | grep -q $repo || add_pacman_repo runtime $repo "$location"
+	done
+}
+
+
+worker_runtime_packages ()
+{
+	for pkg in $var_RUNTIME_PACKAGES
+	do
+		$PACMAN -Sy --noconfirm --needed $pkg
+	done
+}
+
+
+worker_set_clock ()
+{
+	local default=no
+        while true; do
+                ask_option $default "Date/time configuration" '' required \
+                "1" "Select region and timezone" \
+                "2" "Set time and date" \
+                "3" "Return to Main Menu" || return 1
+                [ "$ANSWER_OPTION" = 1 ] && execute worker interactive_timezone && default=2
+                [ "$ANSWER_OPTION" = 2 ] && check_depend worker interactive_timezone && execute worker interactive_time && default=3
+                [ "$ANSWER_OPTION" = 3 ] && break
+        done
+}
+
+
+worker_interactive_timezone ()
+{
+	interactive_timezone
+}
+
+
+worker_interactive_time ()
+{
+	interactive_time
+}
+
+
+worker_prepare_disks ()
+{
+	partition # use lib-archboot function by default
+	get_possible_fs
+	# in official installer: autoprepare or diy first partitions, then mountpoints
+}
+
+
+# Put the list of packages to be installed in $var_TARGET_PACKAGES and $var_TARGET_GROUPS
+worker_package_list ()
+{
+	var_TARGET_GROUPS=base
+}
+
+
+worker_install_packages ()
+{
+	target_prepare_pacman core
+	installpkg
+}
+
+worker_configure_system ()
+{
+	preconfigure_target
+	postconfigure_target
+}
+
+
+worker_install_bootlader ()
+{
+	true
+}
+
+worker_msg_report ()
+{
+	show_report
+}

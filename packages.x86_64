@@ -1,0 +1,39 @@
+#Emulators and games
+#retroarch
+mednafen
+mupen64plus
+snes9x
+stella
+yabause-gtk
+#Xorg part
+xorg
+xf86-video-ati
+xf86-video-intel
+xf86-video-nouveau
+xf86-video-vesa
+xf86-video-fbdev
+xf86-input-libinput
+xorg-xinit
+xorg-mkfontdir
+xorg-xset
+xorg-xwininfo
+xterm
+mesa
+# Window manager / Desktop environment
+openbox
+lxde
+# Hardware suff
+alsa-utils
+bluez
+connman
+fbset
+htop
+hwinfo
+read-edid
+samba
+sdl2
+sdl2_ttf
+udevil
+udisks2
+openssh
+evtest
