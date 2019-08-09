@@ -115,6 +115,9 @@ customize_archiso
 
 # Banzai!
 start_iso_build
+
+# Get the packages list
+cp /work/fakeroot/iso/groovyarcade/pkglist.x86_64.txt /work/output
 }
 
 main
