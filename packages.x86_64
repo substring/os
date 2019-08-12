@@ -30,6 +30,7 @@ connman
 fbset
 htop
 hwinfo
+i2c-tools
 read-edid
 samba
 sdl2
