@@ -3,6 +3,8 @@ FROM archlinux/base:latest
 RUN pacman-key --init && \
     pacman-key --populate archlinux
 
+RUN pacman -Sy --noconfirm reflector
+RUN reflector --verbose --latest 20 --sort rate --save /etc/pacman.d/mirrorlist
 RUN pacman -Syu --noconfirm --needed \
   archiso \
   mkinitcpio \
@@ -32,7 +34,7 @@ COPY customize_airootfs_groovy.sh /work
 COPY overlay /work/overlay
 COPY groovy-ux-repo.conf /etc/pacman.d
 
-RUN grep -q groovy-ux-repo.conf /etc/pacman.conf || echo -e "\nInclude = /etc/pacman.d/groovy-ux-repo.conf" >> /etc/pacman.conf
+RUN grep -q groovy-ux-repo.conf /etc/pacman.conf || sed -i "/^\[core\]$/i Include = \/etc\/pacman.d\/groovy-ux-repo.conf\n" /etc/pacman.conf
 
 WORKDIR /work
 

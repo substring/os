@@ -48,7 +48,6 @@ apply_overlay() {
 cp -R /work/overlay/groovyarcade/* "$AI_DIR"/airootfs/
 cp -R /work/overlay/isolinux/* "$AI_DIR"/isolinux/
 cp -R /work/overlay/syslinux/* "$AI_DIR"/syslinux/
-ls -l "$AI_DIR"/airootfs/etc
 
 # syslinux only hack
 syslinuxcfg="$(LABEL=$ISO_NAME envsubst '${LABEL}' < /work/overlay/syslinux/syslinux.cfg)"
@@ -64,7 +63,8 @@ customize_archiso() {
 # ignore the linux package
 sed -iE "s/#IgnorePkg/IgnorePkg/" "$AI_DIR"/pacman.conf
 sed -iE "/^IgnorePkg/ s/$/ linux/" "$AI_DIR"/pacman.conf
-echo -e "\nInclude = /etc/pacman.d/groovy-ux-repo.conf" >> "$AI_DIR"/pacman.conf
+# Add the groovy repo before arch linux packages. In case, for later
+sed -i "/^\[core\]$/i Include = \/etc\/pacman.d\/groovy-ux-repo.conf\n" "$AI_DIR"/pacman.conf
 mkdir -p "$AI_DIR"/airootfs/etc/pacman.d/
 cp groovy-ux-repo.conf "$AI_DIR"/airootfs/etc/pacman.d/
 

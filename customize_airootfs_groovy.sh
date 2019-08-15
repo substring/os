@@ -8,5 +8,11 @@ sed -i "/^# .*wheel.*NOPASSWD.*/s/^# //" /etc/sudoers
 
 chown arcade:nobody /home/arcade
 chmod 755 /home/arcade
+chmod 700 /home/arcade/.ssh
+
 chown -R arcade:nobody /home/roms
-chmod 777 /home/roms
+chmod -R 777 /home/roms
+
+systemctl enable smb
+systemctl enable nmb
+systemctl enable sshd
