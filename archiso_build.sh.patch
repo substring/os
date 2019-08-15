@@ -65,7 +65,7 @@ index 659e8de..17fc481 100755
 -    cp ${work_dir}/iso/${install_dir}/boot/x86_64/vmlinuz ${work_dir}/efiboot/EFI/archiso/vmlinuz.efi
 -    cp ${work_dir}/iso/${install_dir}/boot/x86_64/archiso.img ${work_dir}/efiboot/EFI/archiso/archiso.img
 +    cp ${work_dir}/iso/${install_dir}/boot/x86_64/vmlinuz${vmlinuz_ext} ${work_dir}/efiboot/EFI/archiso/vmlinuz.efi
-+    cp ${work_dir}/iso/${install_dir}/boot/x86_64/${initramfs_file} ${work_dir}/efiboot/EFI/archiso/${initramfs_file}
++    cp ${work_dir}/iso/${install_dir}/boot/x86_64/${initramfs_file} ${work_dir}/efiboot/EFI/archiso/archiso.img
  
      cp ${work_dir}/iso/${install_dir}/boot/intel_ucode.img ${work_dir}/efiboot/EFI/archiso/intel_ucode.img
      cp ${work_dir}/iso/${install_dir}/boot/amd_ucode.img ${work_dir}/efiboot/EFI/archiso/amd_ucode.img
