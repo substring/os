@@ -18,6 +18,7 @@ xorg-xinit
 xorg-mkfontdir
 xorg-xset
 xorg-xwininfo
+xorg-xmessage
 xterm
 mesa
 # Window manager / Desktop environment
