@@ -99,7 +99,7 @@ add_wanted_packages
 
 # GroovyUX specific, will allow to list groovy packages to later add them to the iso
 prepare_pacman
-append_packages_from_groovyarcade_repo
+#append_packages_from_groovyarcade_repo
 
 # Add groovy-ux own customize_airootfs_groovy.sh
 cp /work/customize_airootfs_groovy.sh "$AI_DIR"/airootfs/root/
