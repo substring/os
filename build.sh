@@ -40,6 +40,8 @@ pacman -Sl groovyarcade | cut -d " " -f 2 >> "$AI_DIR"/packages.x86_64
 
 
 add_wanted_packages () {
+# Remove the default broadcom-wl package
+sed -i "/^broadcom-wl$/d" "$AI_DIR"/packages.x86_64
 grep -v "^#" packages.x86_64 >> "$AI_DIR"/packages.x86_64
 }
 
