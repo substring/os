@@ -2,9 +2,9 @@ image: archlinux/base:latest
 
 stages:
   - build-release
+  - clean
 
-build_iso:
-  stage: build-release
+.build_and_release: &buildandrelease
   script:
     - pacman-key --init && \
       pacman-key --populate archlinux || true
@@ -19,3 +19,39 @@ build_iso:
     - ./build.sh
     - xz -T 0 /work/output/"groovyarcade-$(date +%Y.%m)-x86_64.iso"
     - ./release.sh -cip
+
+build_iso_testing:
+  stage: build-release
+  only:
+    - branches
+  except:
+    - master
+  <<: *buildandrelease
+  environment:
+    name: testing/$CI_COMMIT_REF_SLUG
+    url: https://github.com/substring/os/releases/tag/$CI_COMMIT_REF_SLUG
+    on_stop: clean_release
+    
+build_iso:
+  stage: build-release
+  only:
+    - master
+    - tags
+  <<: *buildandrelease
+    
+clean_release:
+  image: alpine
+  stage: clean
+  when: manual
+  dependencies: []
+  only:
+    - branches
+  before_script:
+    - echo "Deleting deployment $CI_COMMIT_REF_SLUG"
+  environment:
+    name: testing/$CI_COMMIT_REF_SLUG
+    action: stop
+  script:
+    - apk add curl
+    - curl -L https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2 | tar -jx --strip-components 3 -C /usr/local/bin bin/linux/amd64/github-release
+    - github-release delete -t "$CI_COMMIT_REF_SLUG"
