@@ -16,3 +16,11 @@ chmod -R 777 /home/roms
 systemctl enable smb
 systemctl enable nmb
 systemctl enable sshd
+
+# Custom EDID
+(mkdir -p /lib/firmware/edid
+cd /lib/firmware/edid
+/usr/local/bin/switchres 640 480 60 --edid --monitor arcade_15
+/usr/local/bin/switchres 512 384 60 --edid --monitor arcade_25
+/usr/local/bin/switchres 640 480 60 --edid --monitor arcade_31
+)
