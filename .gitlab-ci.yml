@@ -18,7 +18,7 @@ stages:
     - for i in $(seq 0 9) ; do [[ ! -b /dev/loop$i ]] && mknod /dev/loop$i -m0660 b 7 $i ; done
     - ./build.sh
     - xz -T 0 /work/output/"groovyarcade-$(date +%Y.%m)-x86_64.iso"
-    - ./release.sh -cip
+    - ./release.sh -dcip
 
 build_iso_testing:
   stage: build-release
