@@ -53,6 +53,28 @@ $ghr upload \
 }
 
 #
+# Prepare a description
+#
+
+prepare_description() {
+  last_tag=$(git describe --tags --abbrev=0 @^)
+  last_tag_date=$(git log -1 --format=%ai "$last_tag")
+  os_commits_since_last_tag=$(git log --pretty=format:%s "$last_tag"..@ | sed "s/^/- /")
+
+  [[ -d packages ]] && rm -rf packages
+  git clone --single-branch https://gitlab.com/groovyarcade/packages.git
+  cd packages
+  packages_commits_since_last_tag=$(git log --pretty=format:%s --since="$last_tag_date" | sed "s/^/- /")
+  cd ..
+
+  final_desc=$(echo -e "**OS changes:** \n
+$os_commits_since_last_tag\n
+**Packages changes:**\n
+$packages_commits_since_last_tag")
+  echo "$final_desc"
+}
+
+#
 # Make the release definitive
 #
 publish_release() {
@@ -60,7 +82,7 @@ echo "Publihing release $tag"
 $ghr edit \
     --tag "$tag" \
     --name "GroovyArcade $tag" \
-    --description "automatic build" || cancel_and_exit
+    --description "$(prepare_description)" || cancel_and_exit
 }
 
 #
@@ -69,7 +91,7 @@ $ghr edit \
 delete_release() {
 echo "Deleting release $tag..."
 $ghr delete \
-    --tag "$tag"
+    --tag "$tag" || return 0
 }
 
 _iso="groovyarcade-$(date +%Y.%m)-x86_64.iso"
@@ -79,7 +101,7 @@ release_name="GroovyArcade $tag"
 ghr=$([[ -f ~/go/bin/github-release ]] && echo "$HOME/go/bin/github-release" || echo "/usr/local/bin/github-release")
 
 # Make sure all env vars exist
-export GITHUB_TOKEN=${GITHUB_TOKEN:-$(cat ./GITHUB_TOKEN)}
+export GITHUB_TOKEN=${GITHUB_TOKEN:-$(<./GITHUB_TOKEN)}
 [[ -z $GITHUB_USER ]] && (echo "GITHUB_USER is undefined, cancelling." ; exit 1 ;)
 [[ -z $GITHUB_REPO ]] && (echo "GITHUB_REPO is undefined, cancelling." ; exit 1 ;)
 # Allow a local build to release, the CI sets the GITHUB_TOKEN env var
@@ -89,7 +111,7 @@ if [[ -z $GITHUB_TOKEN ]] ; then
 fi
 
 # Parse command line
-while getopts "cipd" option; do
+while getopts "cipdo" option; do
   case "${option}" in
     c)
       create_release
@@ -102,6 +124,9 @@ while getopts "cipd" option; do
       ;;
     d)
       delete_release
+      ;;
+    o)
+      prepare_description
       ;;
     *)
       echo "ERROR: options can be -c -i -p or -d only" >&2
