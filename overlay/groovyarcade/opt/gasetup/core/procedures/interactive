@@ -800,6 +800,7 @@ worker_select_install()
 	mkdir /groovyarcade/{proc,sys,tmp,run,mnt,media}
 	rm -f /groovyarcade/home/arcade/1 /groovyarcade/home/roms/1
 	rm -Rf /groovyarcade/home/arcade/lost+found /groovyarcade/home/roms/lost+found
+	chown -R arcade:arcade /groovyarcade/home/arcade
 	#rsync -caq /run --exclude='archiso' /groovyarcade/
 
 	# Find video output
