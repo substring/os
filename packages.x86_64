@@ -44,6 +44,7 @@ lxde
 alsa-utils
 bluez
 connman
+espeak-ng
 fbset
 htop
 hwinfo
