@@ -9,4 +9,4 @@ if [ ! -f "/home/arcade/.advance/MAME.xml" ]; then
 fi
 
 openbox --config-file ~/.config/GAop.xml &
-advmenu
+attract
