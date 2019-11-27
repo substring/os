@@ -52,7 +52,7 @@ cp -R /work/overlay/isolinux/* "$AI_DIR"/isolinux/
 cp -R /work/overlay/syslinux/* "$AI_DIR"/syslinux/
 
 # Read the kernel default command line from globals
-dflt_cmdline="$(grep KERNEL_DEFAULT_CMDLINE globals | cut -d '=' -f2)"
+dflt_cmdline="$(grep KERNEL_DEFAULT_CMDLINE globals | cut -d '=' -f2-)"
 
 # syslinux only hack
 syslinuxcfg="$(LABEL=$ISO_NAME KRNL_CMDLINE="$dflt_cmdline" envsubst '${LABEL} ${KRNL_CMDLINE}' < /work/overlay/syslinux/syslinux.cfg)"
