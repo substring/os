@@ -8,8 +8,6 @@ stages:
   script:
     - pacman-key --init && \
       pacman-key --populate archlinux || true
-    - pacman -Sy --noconfirm reflector
-    - reflector --verbose --latest 20 --sort rate --save /etc/pacman.d/mirrorlist 
     - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git
     - curl -L https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2 | tar -jx --strip-components 3 -C /usr/local/bin bin/linux/amd64/github-release
     - cp groovy-ux-repo.conf /etc/pacman.d
