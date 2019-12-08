@@ -66,11 +66,19 @@ prepare_description() {
   cd packages
   packages_commits_since_last_tag=$(git log --pretty=format:%s --since="$last_tag_date" | sed "s/^/- /")
   cd ..
+  
+  [[ -d gatools ]] && rm -rf gatools
+  git clone --single-branch https://gitlab.com/groovyarcade/tools/gatools.git
+  cd gatools
+  gatools_commits_since_last_tag=$(git log --pretty=format:%s --since="$last_tag_date" | sed "s/^/- /")
+  cd ..
 
   final_desc=$(echo -e "**OS changes:** \n
 $os_commits_since_last_tag\n
 **Packages changes:**\n
-$packages_commits_since_last_tag")
+$packages_commits_since_last_tag\n
+**gatools changes:**\n
+$gatools_commits_since_last_tag")
   echo "$final_desc"
 }
 
