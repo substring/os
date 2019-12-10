@@ -1,1 +1,1 @@
-KERNEL_DEFAULT_CMDLINE=quiet rd.udev.log-priority=3 splash mitigations=off
+KERNEL_DEFAULT_CMDLINE=quiet rd.udev.log-priority=3 splash mitigations=off audit=0
