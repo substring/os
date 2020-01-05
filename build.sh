@@ -97,10 +97,20 @@ mkdir out
 }
 
 
+use_git_pkg() {
+  pkg_to_rename="gatools gasetup"
+  for pkg in $pkg_to_rename ; do
+    sed -i "s/^${pkg}$/${pkg}-git/g" "$AI_DIR"/packages.x86_64
+  done
+}
+
+
 main() {
+#
 # Basic ARCH stuff
 get_archiso_profile
 add_wanted_packages
+[[ $GA_VERSION != master ]] && [[ ! $GA_VERSION =~ [0-9]{4}\.[0-9]{2} ]] && use_git_pkg
 
 # GroovyUX specific, will allow to list groovy packages to later add them to the iso
 prepare_pacman
