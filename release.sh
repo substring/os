@@ -66,19 +66,31 @@ prepare_description() {
   cd packages
   packages_commits_since_last_tag=$(git log --pretty=format:%s --since="$last_tag_date" | sed "s/^/- /")
   cd ..
-  
+
   [[ -d gatools ]] && rm -rf gatools
   git clone --single-branch https://gitlab.com/groovyarcade/tools/gatools.git
   cd gatools
   gatools_commits_since_last_tag=$(git log --pretty=format:%s --since="$last_tag_date" | sed "s/^/- /")
   cd ..
 
+  [[ -d gasetup ]] && rm -rf gasetup
+  git clone --single-branch https://gitlab.com/groovyarcade/gasetup.git
+  cd gasetup
+  gasetup_commits_since_last_tag=$(git log --pretty=format:%s --since="$last_tag_date" | sed "s/^/- /")
+  cd ..
+
+  pkg_version=$(</work/output/pkglist.x86_64.txt)
   final_desc=$(echo -e "**OS changes:** \n
 $os_commits_since_last_tag\n
 **Packages changes:**\n
 $packages_commits_since_last_tag\n
+**gasetup changes:**\n
+$gasetup_commits_since_last_tag\n
 **gatools changes:**\n
-$gatools_commits_since_last_tag")
+$gatools_commits_since_last_tag\n
+**packages included:**\n
+$pkg_version
+")
   echo "$final_desc"
 }
 
