@@ -5,7 +5,7 @@ stages:
   - clean
 
 .build_and_release: &buildandrelease
-  script:
+  before_script:
     - pacman-key --init && \
       pacman-key --populate archlinux || true
     - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git
@@ -16,7 +16,6 @@ stages:
     - for i in $(seq 0 9) ; do [[ ! -b /dev/loop$i ]] && mknod /dev/loop$i -m0660 b 7 $i ; done
     - ./build.sh
     - xz -T 0 /work/output/"groovyarcade-$(date +%Y.%m)-x86_64.iso"
-    - ./release.sh -dcip
 
 build_iso_testing:
   stage: build-release
@@ -25,6 +24,8 @@ build_iso_testing:
   except:
     - master
   <<: *buildandrelease
+  script:
+    - ./release.sh -dci
   environment:
     name: testing/$CI_COMMIT_REF_SLUG
     url: https://github.com/substring/os/releases/tag/$CI_COMMIT_REF_SLUG
@@ -36,6 +37,8 @@ build_iso:
     - master
     - tags
   <<: *buildandrelease
+  script:
+    - ./release.sh -dcip
     
 clean_release:
   image: alpine
