@@ -28,7 +28,7 @@ create_release() {
 $ghr release \
     --tag "$tag" \
     --name "$release_name" \
-    --description "automatic build" \
+    --description "$(prepare_description)" \
     --pre-release
 }
 
