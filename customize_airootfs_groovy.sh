@@ -2,7 +2,7 @@
 usermod -s /bin/bash root
 
 groupadd --gid 1000 arcade
-useradd --uid 1000 --gid 1000 --create-home --home-dir /home/arcade --shell /bin/bash --groups adm,audio,disk,games,log,network,nobody,optical,power,storage,tty,users,video,wheel arcade
+useradd --uid 1000 --gid 1000 --create-home --home-dir /home/arcade --shell /bin/bash --groups adm,audio,disk,games,input,log,network,nobody,optical,power,storage,tty,users,video,wheel arcade
 echo -e "arcade\narcade" | passwd arcade
 sed -i "/^# .*wheel.*NOPASSWD.*/s/^# //" /etc/sudoers
 
