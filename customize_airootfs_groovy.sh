@@ -13,6 +13,18 @@ chmod 700 /home/arcade/.ssh
 chown -R arcade:nobody /home/roms
 chmod -R 777 /home/roms
 
+# Add a arcade smaba user
+(echo "arcade"; echo "arcade") | smbpasswd -s -a arcade
+
 systemctl enable smb
 systemctl enable nmb
 systemctl enable sshd
+
+# Only build the default initramfs
+sed -i "s/^PRESETS=.*/PRESETS=('default')/" /etc/mkinitcpio.d/linux-15khz.preset
+
+# Solve a plymouth bug with systemd 245
+# https://github.com/systemd/systemd/issues/15091#issuecomment-598184528
+for f in /usr/lib/systemd/system/plymouth-*.service ; do 
+  grep -q "RemainAfterExit=yes" "$f" || sudo sed -i "/\[Service\]/a RemainAfterExit=yes" "$f"
+done

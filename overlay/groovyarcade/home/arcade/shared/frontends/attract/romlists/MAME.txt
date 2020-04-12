@@ -1,0 +1,25 @@
+#Name;Title;Emulator;CloneOf;Year;Manufacturer;Category;Players;Rotation;Control;Status;DisplayCount;DisplayType;AltRomname;AltTitle;Extra;Buttons
+robby;The Adventures of Robby Roto!;MAME;;1981;Dave Nutting Associates / Bally Midway;;2;0;joystick (4-way),joystick (4-way);good;1;raster;;;;1
+alienar;Alien Arena;MAME;;1985;Duncan Brown;;2;0;joystick (8-way),joystick (8-way);good;1;raster;;;;2
+carpolo;Car Polo;MAME;;1977;Exidy;;4;0;dial,dial,dial,dial;preliminary;1;raster;;;;3
+circus;Circus / Acrobat TV;MAME;;1977;Exidy / Taito;;1;0;paddle;imperfect;1;raster;;;;
+crash;Crash;MAME;;1979;Exidy;;1;0;joystick (4-way);imperfect;1;raster;;;;1
+fax;FAX;MAME;;1983;Exidy;;2;0;only_buttons,only_buttons;good;1;raster;;;;4
+fax2;FAX 2;MAME;fax;1983;Exidy;;2;0;only_buttons,only_buttons;good;1;raster;fax;;;4
+fireone;Fire One;MAME;;1979;Exidy;;2;0;paddle,paddle;preliminary;1;raster;;;;2
+gridlee;Gridlee;MAME;;1983;Videa;;2;0;trackball,trackball;imperfect;1;raster;;;;1
+hardhat;Hard Hat;MAME;;1982;Exidy;;1;0;joystick (4-way);good;1;raster;;;;1
+looping;Looping;MAME;;1982;Video Games GmbH;;2;90;joystick (vertical2-way),joystick (vertical2-way);imperfect;1;raster;;;;2
+ripcord;Rip Cord;MAME;;1979;Exidy;;1;0;paddle;imperfect;1;raster;;;;2
+robotbwl;Robot Bowl;MAME;;1977;Exidy;;1;0;joystick (2-way);imperfect;1;raster;;;;2
+sidetrac;Side Trak;MAME;;1979;Exidy;;1;0;joystick (4-way);imperfect;1;raster;;;;1
+spectar;Spectar (revision 3);MAME;;1980;Exidy;;1;0;joystick (4-way);imperfect;1;raster;;;;1
+starfire;Star Fire (set 1);MAME;;1979;Exidy;;1;0;joystick (analog);imperfect;1;raster;;;;1
+starfir2;Star Fire 2;MAME;;1979;Exidy;;1;0;joystick (analog);imperfect;1;raster;;;;1
+supertnk;Super Tank;MAME;;1981;Video Games GmbH;;2;90;joystick (8-way),joystick (8-way);good;1;raster;;;;1
+targ;Targ;MAME;;1980;Exidy;;1;0;joystick (4-way);imperfect;1;raster;;;;1
+teetert;Teeter Torture (prototype);MAME;;1982;Exidy;;1;0;dial;good;1;raster;;;;1
+topgunnr;Top Gunner (Exidy);MAME;;1986;Exidy;;1;0;joystick (analog),paddle;good;1;vector;;;;2
+victorba;Victor Banana;MAME;victory;1982;Exidy;;1;0;dial;good;1;raster;victory;;;4
+victory;Victory;MAME;;1982;Exidy;;1;0;dial;good;1;raster;;;;4
+wrally;World Rally (Version 1.0, Checksum 0E56);MAME;;1993;Gaelco;;2;0;joystick (8-way),dial,joystick (8-way);good;1;raster;;;;2

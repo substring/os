@@ -1,27 +1,29 @@
 #Groovymame specific
-advancemenuplus-git
+#advancemenuplus-git
 antimicro
 attract
 broadcom-wl-15khz
 easybashgui
 edid-decode-git
+galauncher
 gasetup
 gatools
 groovymame
 joy2key
 linux-15khz
-nestopia
+#nestopia
 plymouth
 qjoypad
-svgalib
+con2fbmap
+#svgalib
 switchres
 #Emulators and games
 #retroarch
-mednafen
-mupen64plus
-snes9x
-stella
-yabause-gtk
+#mednafen
+#mupen64plus
+#snes9x
+#stella
+#yabause-gtk
 #Xorg part
 xorg
 xf86-video-ati
@@ -58,3 +60,5 @@ udevil
 udisks2
 openssh
 evtest
+# Others
+ttf-hack

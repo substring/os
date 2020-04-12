@@ -98,7 +98,7 @@ mkdir out
 
 
 use_git_pkg() {
-  pkg_to_rename="gatools gasetup"
+  pkg_to_rename="gatools gasetup galauncher"
   for pkg in $pkg_to_rename ; do
     sed -i "s/^${pkg}$/${pkg}-git/g" "$AI_DIR"/packages.x86_64
   done
