@@ -1,9 +1,6 @@
 export PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin
 MYTTY=$(tty)
 
-alias ls='ls --color=auto'
-alias startx="startx -- vt7"
-
 if [ "$MYTTY" = "/dev/tty1" ]; then
     sudo setterm -powerdown 0 -powersave off -blank 0
     # Only autoconfigure if no screen was set yet
