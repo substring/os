@@ -28,3 +28,6 @@ sed -i "s/^PRESETS=.*/PRESETS=('default')/" /etc/mkinitcpio.d/linux-15khz.preset
 for f in /usr/lib/systemd/system/plymouth-*.service ; do 
   grep -q "RemainAfterExit=yes" "$f" || sudo sed -i "/\[Service\]/a RemainAfterExit=yes" "$f"
 done
+
+# Disable the lvm2 monitor as it considerably slows down the boot
+systemctl disable lvm2-monitor.service
