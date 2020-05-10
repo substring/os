@@ -2,6 +2,7 @@
 #advancemenuplus-git
 antimicro
 attract
+attract-config
 broadcom-wl-15khz
 easybashgui
 edid-decode-git
@@ -11,6 +12,8 @@ gatools
 groovymame
 joy2key
 linux-15khz
+groovyarcade-config
+groovymame-config
 #nestopia
 plymouth
 qjoypad
