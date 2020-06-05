@@ -88,8 +88,10 @@ $packages_commits_since_last_tag\n
 $gasetup_commits_since_last_tag\n
 **gatools changes:**\n
 $gatools_commits_since_last_tag\n
-**packages included:**\n
+<details>
+  <summary><b>Packages included:</b></summary>\n\n
 $pkg_version
+</details>
 ")
   echo "$final_desc"
 }
