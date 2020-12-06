@@ -11,4 +11,5 @@ docker build -f Dockerfile -t "$IMAGE_NAME" . &&
 echo "+++++++++++++++++++++++++++++"
 echo "+++ Running container     +++"
 echo "+++++++++++++++++++++++++++++"
-docker run --privileged --tty --name "$IMAGE_NAME" --rm -v "$(pwd)/work/output":/work/output -v "$(pwd)/work/fakeroot":/work/fakeroot "$IMAGE_NAME"
+#docker run --privileged --tty --name "$IMAGE_NAME" --rm -v "$(pwd)/work/output":/work/output -v "$(pwd)/work/fakeroot":/work/fakeroot "$IMAGE_NAME"
+docker run --privileged --tty --name "$IMAGE_NAME" --rm -v "$(pwd)/work/output":/work/output "$IMAGE_NAME"

@@ -1,4 +1,4 @@
-FROM archlinux/base:latest
+FROM archlinux:latest
 
 RUN pacman-key --init && \
     pacman-key --populate archlinux
@@ -26,13 +26,10 @@ RUN mkdir -p /work/overlay /work/fakeroot
 
 COPY build.sh /work
 COPY settings /work
-COPY packages.x86_64 /work
-COPY archiso_build.sh.patch /work
-COPY mkarchiso.patch /work
 COPY groovy-ux-repo.conf /work
-COPY customize_airootfs_groovy.sh /work
-COPY overlay /work/overlay
 COPY groovy-ux-repo.conf /etc/pacman.d
+COPY globals /work
+COPY groovyarcade /work/groovyarcade
 
 RUN grep -q groovy-ux-repo.conf /etc/pacman.conf || sed -i "/^\[core\]$/i Include = \/etc\/pacman.d\/groovy-ux-repo.conf\n" /etc/pacman.conf
 
