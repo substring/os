@@ -40,3 +40,6 @@ basic_opts="-p base -u arcade"
 /opt/gasetup/gasetup.sh $basic_opts -c groovyarcade
 /opt/gasetup/gasetup.sh $basic_opts -c attract
 /opt/gasetup/gasetup.sh $basic_opts -c groovymame
+
+# Remove the fallback initramfs
+rm /boot/*-fallback.img

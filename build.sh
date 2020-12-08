@@ -51,10 +51,10 @@ syslinuxcfg="$(LABEL=$ISO_NAME KRNL_CMDLINE="$dflt_cmdline" envsubst '${LABEL} $
 echo "$syslinuxcfg" > "$AI_DIR"/syslinux/syslinux.cfg
 
 # UEFI syslinux only hack
-syslinuxcfg="$(LABEL=$ISO_NAME KRNL_CMDLINE="$dflt_cmdline" envsubst '${LABEL} ${KRNL_CMDLINE}' < /work/groovyarcade/syslinux/syslinux.cfg)"
-#LABEL=$ISO_NAME envsubst '${LABEL}' < /work/overlay/syslinux/syslinux.cfg > "$AI_DIR"/syslinux/syslinux.cfg
-echo "$syslinuxcfg" > "$AI_DIR"/efiboot/loader/entries/syslinux.cfg
-
+for f in "$AI_DIR"/efiboot/loader/entries/*.conf ; do
+  entry="$(KRNL_CMDLINE="$dflt_cmdline" envsubst '${KRNL_CMDLINE}' < "$f")"
+  echo "$entry" > "$f"
+done
 
 # the initramfs is built before syncing the overlays, so circumvent this with a nasty hack
 #cp /work/overlay/groovyarcade/etc/mkinitcpio-dvd.conf "$AI_DIR"/etc/mkinitcpio.conf
