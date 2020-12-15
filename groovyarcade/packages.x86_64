@@ -29,6 +29,7 @@ switchres
 #stella
 #yabause-gtk
 xmlstarlet
+vi-vim-symlink
 #Xorg part
 xorg
 xf86-video-ati
