@@ -16,7 +16,7 @@ RUN pacman -Syu --noconfirm --needed \
   dos2unix \
   gettext
 
-RUN curl -L https://github.com/github-release/github-release/releases/download/v0.10.0/linux-amd64-github-release.bz2 | tar -jx --strip-components 3 -C /usr/local/bin bin/linux/amd64/github-release
+RUN curl -L https://github.com/github-release/github-release/releases/download/v0.10.0/linux-amd64-github-release.bz2 | bzip2 -d > /usr/local/bin/github-release && chmod +x /usr/local/bin/github-release
 
 RUN mkdir -p /work/overlay /work/fakeroot
 
