@@ -9,7 +9,7 @@ stages:
     - pacman-key --init && \
       pacman-key --populate archlinux || true
     - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git
-    - curl -L https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2 | tar -jx --strip-components 3 -C /usr/local/bin bin/linux/amd64/github-release
+    - curl -L https://github.com/github-release/github-release/releases/download/v0.10.0/linux-amd64-github-release.bz2 | tar -jx --strip-components 3 -C /usr/local/bin bin/linux/amd64/github-release
     - cp groovy-ux-repo.conf /etc/pacman.d
     - grep -q groovy-ux-repo.conf /etc/pacman.conf || echo -e "\nInclude = /etc/pacman.d/groovy-ux-repo.conf" >> /etc/pacman.conf
     - ln -s "$(pwd)" /work && ls -l /work
@@ -54,5 +54,5 @@ clean_release:
     action: stop
   script:
     - apk add curl
-    - curl -L https://github.com/aktau/github-release/releases/download/v0.7.2/linux-amd64-github-release.tar.bz2 | tar -jx --strip-components 3 -C /usr/local/bin bin/linux/amd64/github-release
+    - curl -L https://github.com/github-release/github-release/releases/download/v0.10.0/linux-amd64-github-release.bz2 | tar -jx --strip-components 3 -C /usr/local/bin bin/linux/amd64/github-release
     - github-release delete -t "$CI_COMMIT_REF_SLUG"
