@@ -5,43 +5,9 @@ source settings
 ARCHISO_PROFILE=groovyarcade
 AI_DIR=/work/"$ARCHISO_PROFILE"
 ISO_NAME="GA_$(date +%Y.%m)"
-#mkdir -p "$AI_DIR"
-
-
-get_archiso_profile() {
-cp -r /usr/share/archiso/configs/"$ARCHISO_PROFILE"/ /work/groovylive/
-}
-
-
-prepare_pacman() {
-pacman -Sy
-}
-
-
-install_packages_from_groovyarcade_repo() {
-# Make a list of groovyarcade packages
-local tmpfile="/tmp/groovyarcade_repo.lst"
-pacman -Sl groovyarcade | cut -d " " -f 2 > "$tmpfile"
-pacman -Sy --noconfirm - < "$tmpfile"
-}
-
-
-append_packages_from_groovyarcade_repo() {
-# Make a list of groovyarcade packages
-pacman -Sl groovyarcade | cut -d " " -f 2 >> "$AI_DIR"/packages.x86_64
-}
-
-
-add_wanted_packages () {
-grep -v "^#" packages.x86_64 > "$AI_DIR"/packages.x86_64
-}
 
 
 apply_overlay() {
-#cp -R /work/overlay/groovyarcade/* "$AI_DIR"/airootfs/
-#cp -R /work/overlay/isolinux/* "$AI_DIR"/isolinux/
-#cp -R /work/overlay/syslinux/* "$AI_DIR"/syslinux/
-
 # Read the kernel default command line from globals
 dflt_cmdline="$(grep KERNEL_DEFAULT_CMDLINE globals | cut -d '=' -f2-)"
 
@@ -55,28 +21,11 @@ for f in "$AI_DIR"/efiboot/loader/entries/*.conf ; do
   entry="$(KRNL_CMDLINE="$dflt_cmdline" envsubst '${KRNL_CMDLINE}' < "$f")"
   echo "$entry" > "$f"
 done
-
-# the initramfs is built before syncing the overlays, so circumvent this with a nasty hack
-#cp /work/overlay/groovyarcade/etc/mkinitcpio-dvd.conf "$AI_DIR"/etc/mkinitcpio.conf
 }
 
 customize_archiso() {
-# Set the pacman.conf the way we want it
-# ignore the linux package
-#sed -iE "s/#IgnorePkg/IgnorePkg/" "$AI_DIR"/pacman.conf
-#sed -iE "/^IgnorePkg/ s/$/ linux/" "$AI_DIR"/pacman.conf
-#sed -iE "s/^#Color$/Color/" "$AI_DIR"/pacman.conf
-# Add the groovy repo before arch linux packages. In case, for later
-#sed -i "/^\[core\]$/i Include = \/etc\/pacman.d\/groovy-ux-repo.conf\n" "$AI_DIR"/pacman.conf
 mkdir -p "$AI_DIR"/airootfs/etc/pacman.d/
 cp groovy-ux-repo.conf "$AI_DIR"/airootfs/etc/pacman.d/
-
-# Patch archiso's build.sh for custom kernel
-#patch -p3 -d "$AI_DIR" < archiso_build.sh.patch
-
-# Patch mkarchiso to prevent deleting initramfs and kernel, leacving /boot untouched
-# so gasetup will correctly mkinitcpio the 15khz kernel
-#patch -p2 -d /usr/sbin < mkarchiso.patch ||exit 1
 }
 
 
@@ -91,6 +40,11 @@ mkarchiso -v \
 }
 
 
+enable_testing_repo() {
+  sed -Ei '1,3s/^#(.*)/\1/g' groovy-ux-repo.conf
+}
+
+
 use_git_pkg() {
   pkg_to_rename="gatools gasetup galauncher"
   for pkg in $pkg_to_rename ; do
@@ -100,29 +54,18 @@ use_git_pkg() {
 
 
 main() {
-#
-# Basic ARCH stuff
-#get_archiso_profile
-#add_wanted_packages
-[[ $GA_VERSION != master ]] && [[ ! $GA_VERSION =~ [0-9]{4}\.[0-9]{2} ]] && use_git_pkg
+# Enable the testing repo for non stable versions
+if [[ $GA_VERSION != master && ! $GA_VERSION =~ [0-9]{4}\.[0-9]{2} ]] ; then
+  use_git_pkg
+  enable_testing_repo
+fi
 
-# GroovyUX specific, will allow to list groovy packages to later add them to the iso
-#prepare_pacman
-#append_packages_from_groovyarcade_repo
-
-# Add groovy-ux own customize_airootfs_groovy.sh -> TO BE REMOVED
-#cp /work/customize_airootfs_groovy.sh "$AI_DIR"/airootfs/root/
-#echo "/root/customize_airootfs_groovy.sh" >> "$AI_DIR"/airootfs/root/customize_airootfs.sh
-#cat "$AI_DIR"/airootfs/root/customize_airootfs.sh
-#ls -la "$AI_DIR"/airootfs/root/customize_airootfs_groovy.sh
 
 # Sync overlay
 apply_overlay
 
 #patch archiso build.sh for custom pacman.conf
 customize_archiso
-
-#ls -lR "$AI_DIR"
 
 # Banzai!
 start_iso_build
