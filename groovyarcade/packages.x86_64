@@ -12,6 +12,7 @@ gatools
 groovymame
 joy2key
 linux-15khz
+linux-15khz-headers
 #groovyarcade-config
 groovymame-extra
 #nestopia
@@ -57,13 +58,13 @@ fbset
 htop
 hwinfo
 i2c-tools
+lshw
 read-edid
 samba
 sdl2
 sdl2_ttf
-udevil
 udisks2
-openssh
+udiskie
 evtest
 # Others
 ttf-hack
