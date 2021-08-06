@@ -82,7 +82,6 @@ efibootmgr
 ethtool
 exfatprogs
 gptfdisk
-haveged
 intel-ucode
 ipw2100-fw
 ipw2200-fw
@@ -104,11 +103,11 @@ parted
 rsync
 rxvt-unicode-terminfo
 smartmontools
+sof-firmware
 sudo
 syslinux
 systemd-resolvconf
 terminus-font
-termite-terminfo
 usb_modeswitch
 usbutils
 vim
