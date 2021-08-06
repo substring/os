@@ -6,6 +6,7 @@ stages:
 
 .build_and_release: &buildandrelease
   before_script:
+    - sed -i "/#VerbosePkgLists/a ParallelDownloads = 5" /etc/pacman.conf
     - pacman-key --init && \
       pacman-key --populate archlinux || true
     - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git
