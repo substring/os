@@ -99,6 +99,7 @@ nfs-utils
 ntfs-3g
 nvme-cli
 openssh
+pacman-mirrorlist
 parted
 pv
 rsync
