@@ -24,19 +24,20 @@ done
 }
 
 customize_archiso() {
-mkdir -p "$AI_DIR"/airootfs/etc/pacman.d/
-cp groovy-ux-repo.conf "$AI_DIR"/airootfs/etc/pacman.d/
+  mkdir -p "$AI_DIR"/airootfs/etc/pacman.d/
+  cp groovy-ux-repo.conf "$AI_DIR"/airootfs/etc/pacman.d/
+  cp groovy-ux-repo.conf /etc/pacman.d/
 }
 
 
 start_iso_build() {
-mkarchiso -v \
-  -o /work/output \
-  -L "$ISO_NAME" \
-  -A "GroovyArcade Install DVD" \
-  -w /work/fakeroot \
-  -D groovyarcade \
-  "$AI_DIR"
+  mkarchiso -v \
+    -o /work/output \
+    -L "$ISO_NAME" \
+    -A "GroovyArcade Install DVD" \
+    -w /work/fakeroot \
+    -D groovyarcade \
+    "$AI_DIR"
 }
 
 
@@ -56,15 +57,15 @@ use_git_pkg() {
 main() {
 # Enable the testing repo for non stable versions
 if [[ $GA_VERSION != master && ! $GA_VERSION =~ [0-9]{4}\.[0-9]{2} ]] ; then
+  echo "Enabling the testing repo and packages"
   use_git_pkg
   enable_testing_repo
 fi
 
-
 # Sync overlay
 apply_overlay
 
-#patch archiso build.sh for custom pacman.conf
+# patch archiso build.sh for custom pacman.conf
 customize_archiso
 
 # Banzai!
