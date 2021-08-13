@@ -9,7 +9,7 @@ set -e -u
 sed -i 's/#\(en_US\.UTF-8\)/\1/' /etc/locale.gen
 locale-gen
 
-sed -i "s/#Server/Server/g" /etc/pacman.d/mirrorlist
+curl -L "https://archlinux.org/mirrorlist/all/" | sed "s/#Server/Server/g" > /etc/pacman.d/mirrorlist
 
 # GroovyArcade specific
 groupadd --gid 1000 arcade
