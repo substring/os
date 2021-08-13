@@ -4,6 +4,7 @@ iso_publisher="Substring"
 iso_application="GroovyArcade Install/Live CD"
 iso_version="$(date +%Y.%m)"
 install_dir="groovyarcade"
+buildmodes=('iso')
 bootmodes=('bios.syslinux.mbr' 'bios.syslinux.eltorito' 'uefi-x64.systemd-boot.esp' 'uefi-x64.systemd-boot.eltorito')
 arch="x86_64"
 pacman_conf="pacman.conf"
