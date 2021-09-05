@@ -2,7 +2,6 @@
 #advancemenuplus-git
 antimicro
 attract
-#attract-config
 broadcom-wl-15khz
 easybashgui
 edid-decode-git
@@ -13,14 +12,11 @@ groovymame
 joy2key
 linux-15khz
 linux-15khz-headers
-#groovyarcade-config
 groovymame-extra
-#nestopia
 plymouth
 plymouth-theme-groovy
 qjoypad
 con2fbmap
-#svgalib
 switchres
 upd72020x-fw
 #Emulators and games
@@ -101,6 +97,7 @@ nvme-cli
 openssh
 parted
 pv
+reflector
 rsync
 rxvt-unicode-terminfo
 smartmontools
