@@ -67,6 +67,7 @@ evtest
 ttf-hack
 #base OS
 amd-ucode
+amdvlk
 arch-install-scripts
 b43-fwcutter
 base
@@ -109,6 +110,7 @@ terminus-font
 usb_modeswitch
 usbutils
 vim
+vulkan-radeon
 wireless-regdb
 wireless_tools
 wpa_supplicant
