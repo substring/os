@@ -25,11 +25,11 @@ need_assets() {
 #
 create_release() {
   echo "Creating release $tag"
-$ghr release \
-    --tag "$tag" \
-    --name "$release_name" \
-    --description "$(prepare_description)" \
-    --pre-release
+$ghr release create "$tag" \
+    -R "$GITHUB_USER"/"$GITHUB_REPO" \
+    --title "$release_name" \
+    --notes "$(prepare_description)" \
+    --prerelease
 }
 
 #
@@ -41,15 +41,14 @@ need_assets
 [[ ! -f ${_OUTPUT}/${_iso}.xz ]] && cancel_and_exit
 
 echo "Uploading ${_iso}.xz..."
-$ghr upload \
-    --tag "$tag" \
-    --name "${_iso}.xz" \
-    --file "${_OUTPUT}/${_iso}.xz" || cancel_and_exit
+$ghr release upload "$tag" \
+    "${_OUTPUT}/${_iso}.xz" \
+    -R "$GITHUB_USER"/"$GITHUB_REPO" \
+    --clobber || cancel_and_exit
 echo "Uploading pkglist.x86_64.txt"
-$ghr upload \
-    --tag "$tag" \
-    --name "pkglist.x86_64.txt" \
-    --file "${_OUTPUT}/pkglist.x86_64.txt" || cancel_and_exit
+$ghr release upload "$tag" "${_OUTPUT}/pkglist.x86_64.txt" \
+    -R "$GITHUB_USER"/"$GITHUB_REPO" \
+    --clobber || cancel_and_exit
 }
 
 #
@@ -101,10 +100,10 @@ $pkg_version
 #
 publish_release() {
 echo "Publihing release $tag"
-$ghr edit \
-    --tag "$tag" \
-    --name "GroovyArcade $tag" \
-    --description "$(prepare_description)" || cancel_and_exit
+$ghr release edit "$tag" \
+    -R "$GITHUB_USER"/"$GITHUB_REPO" \
+    --title "GroovyArcade $tag" \
+    --notes "$(prepare_description)" || cancel_and_exit
 }
 
 #
@@ -112,15 +111,16 @@ $ghr edit \
 #
 delete_release() {
 echo "Deleting release $tag..."
-$ghr delete \
-    --tag "$tag" || return 0
+$ghr release delete "$tag" \
+    -R "$GITHUB_USER"/"$GITHUB_REPO" \
+    --yes || return 0
 }
 
 _iso="groovyarcade-$(date +%Y.%m)-x86_64.iso"
 tag=${GA_VERSION}
 
 release_name="GroovyArcade $tag"
-ghr=$([[ -f ~/go/bin/github-release ]] && echo "$HOME/go/bin/github-release" || echo "/usr/local/bin/github-release")
+ghr=gh
 
 # Make sure all env vars exist
 export GITHUB_TOKEN=${GITHUB_TOKEN:-$(<./GITHUB_TOKEN)}

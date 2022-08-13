@@ -1,8 +1,8 @@
 FROM archlinux:latest
 
-RUN export patched_glibc=glibc-linux4-2.33-4-x86_64.pkg.tar.zst && \
-  curl -LO https://repo.archlinuxcn.org/x86_64/$patched_glibc && \
-  bsdtar -C / -xvf $patched_glibc
+#RUN export patched_glibc=glibc-linux4-2.33-4-x86_64.pkg.tar.zst && \
+#  curl -LO https://repo.archlinuxcn.org/x86_64/$patched_glibc && \
+#  bsdtar -C / -xvf $patched_glibc
 
 RUN sed -i "/#VerbosePkgLists/a ParallelDownloads = 5" /etc/pacman.conf
 
@@ -20,9 +20,10 @@ RUN pacman -Syu --noconfirm --needed \
   haveged \
   wget \
   dos2unix \
-  gettext
+  gettext \
+  github-cli
 
-RUN curl -L https://github.com/github-release/github-release/releases/download/v0.10.0/linux-amd64-github-release.bz2 | bzip2 -d > /usr/local/bin/github-release && chmod +x /usr/local/bin/github-release
+#RUN curl -L https://github.com/github-release/github-release/releases/download/v0.10.0/linux-amd64-github-release.bz2 | bzip2 -d > /usr/local/bin/github-release && chmod +x /usr/local/bin/github-release
 
 RUN mkdir -p /work/overlay /work/fakeroot
 

@@ -9,8 +9,7 @@ stages:
     - sed -i "/#VerbosePkgLists/a ParallelDownloads = 5" /etc/pacman.conf
     - pacman-key --init && \
       pacman-key --populate archlinux || true
-    - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git
-    - curl -L https://github.com/github-release/github-release/releases/download/v0.10.0/linux-amd64-github-release.bz2 | bzip2 -d > /usr/local/bin/github-release && chmod +x /usr/local/bin/github-release
+    - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git github-cli
     - cp groovy-ux-repo.conf /etc/pacman.d
     - grep -q groovy-ux-repo.conf /etc/pacman.conf || echo -e "\nInclude = /etc/pacman.d/groovy-ux-repo.conf" >> /etc/pacman.conf
     - ln -s "$(pwd)" /work && ls -l /work
@@ -31,7 +30,7 @@ build_iso_testing:
     name: testing/$CI_COMMIT_REF_SLUG
     url: https://github.com/substring/os/releases/tag/$CI_COMMIT_REF_SLUG
     on_stop: clean_release
-    
+
 build_iso:
   stage: build-release
   only:
@@ -40,7 +39,7 @@ build_iso:
   <<: *buildandrelease
   script:
     - ./release.sh -dcip
-    
+
 clean_release:
   image: alpine
   stage: clean
