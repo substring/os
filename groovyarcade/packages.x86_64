@@ -71,8 +71,7 @@ amdvlk
 arch-install-scripts
 b43-fwcutter
 base
-bind-tools
-crda
+bind
 dosfstools
 edk2-shell
 efibootmgr
@@ -85,6 +84,7 @@ ipw2200-fw
 iwd
 linux-atm
 linux-firmware
+linux-firmware-marvell
 man-db
 man-pages
 mkinitcpio
