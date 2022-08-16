@@ -16,7 +16,7 @@ groupadd --gid 1000 arcade
 usermod -a -G adm,audio,disk,games,input,log,network,nobody,optical,power,storage,tty,users,video,wheel arcade
 sed -i "/^# .*wheel.*NOPASSWD.*/s/^# //" /etc/sudoers
 
-# Add a arcade smaba user
+# Add a arcade samba user
 (echo "arcade"; echo "arcade") | smbpasswd -s -a arcade
 
 systemctl enable smb
