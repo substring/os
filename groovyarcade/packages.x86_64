@@ -38,8 +38,6 @@ xf86-video-fbdev
 xf86-input-libinput
 xorg-xinit
 xorg-mkfontdir
-xorg-xset
-xorg-xwininfo
 xorg-xmessage
 xterm
 mesa
@@ -49,6 +47,8 @@ lxde
 dialog
 # Hardware suff
 alsa-utils
+sof-firmware
+alsa-ucm-conf
 bluez
 espeak-ng
 fbset
@@ -58,8 +58,6 @@ i2c-tools
 lshw
 read-edid
 samba
-sdl2
-sdl2_ttf
 udisks2
 udiskie
 evtest
@@ -102,7 +100,6 @@ reflector
 rsync
 rxvt-unicode-terminfo
 smartmontools
-sof-firmware
 sudo
 syslinux
 systemd-resolvconf
