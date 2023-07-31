@@ -9,7 +9,8 @@ stages:
     - sed -i "/#VerbosePkgLists/a ParallelDownloads = 5" /etc/pacman.conf
     - pacman-key --init && \
       pacman-key --populate archlinux || true
-    - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git github-cli
+    - pacman -Syu --noconfirm archiso patch grep gettext file xz tar git github-cli reflector
+    - reflector --verbose --latest 20 --sort rate --save /etc/pacman.d/mirrorlist
     - cp groovy-ux-repo.conf /etc/pacman.d
     - grep -q groovy-ux-repo.conf /etc/pacman.conf || echo -e "\nInclude = /etc/pacman.d/groovy-ux-repo.conf" >> /etc/pacman.conf
     - ln -s "$(pwd)" /work && ls -l /work
