@@ -1,6 +1,6 @@
 FROM archlinux:latest
 
-RUN sed -i "/#VerbosePkgLists/a ParallelDownloads = 5" /etc/pacman.conf
+RUN sed -i "/#VerbosePkgLists/a ParallelDownloads = 25" /etc/pacman.conf
 
 RUN pacman-key --init && \
     pacman-key --populate archlinux
