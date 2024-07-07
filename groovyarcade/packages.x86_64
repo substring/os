@@ -79,6 +79,9 @@ ethtool
 exfatprogs
 gptfdisk
 intel-ucode
+libva-intel-driver
+intel-media-driver
+mesa-vdpau
 iwd
 linux-atm
 linux-firmware
