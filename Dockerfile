@@ -5,13 +5,13 @@ RUN sed -i "/#VerbosePkgLists/a ParallelDownloads = 25" /etc/pacman.conf
 RUN pacman-key --init && \
     pacman-key --populate archlinux
 
-RUN pacman -Sy --noconfirm reflector
+RUN pacman -Syu --noconfirm reflector curl rsync
+RUN curl "https://archlinux.org/mirrorlist/?country=all&protocol=http&protocol=https&ip_version=4&use_mirror_status=on" | sed 's/^#\(.*\)/\1/' > /etc/pacman.d/mirrorlist
 RUN reflector --verbose --latest 20 --sort rate --save /etc/pacman.d/mirrorlist
 RUN pacman -Syu --noconfirm --needed \
   archiso \
   mkinitcpio \
   cdrtools \
-  asp \
   base-devel \
   haveged \
   wget \
