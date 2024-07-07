@@ -28,7 +28,7 @@ systemctl enable sshd
 sed -i "s/^PRESETS=.*/PRESETS=('default')/" /etc/mkinitcpio.d/linux-15khz.preset
 
 # Disable the lvm2 monitor as it considerably slows down the boot. Don't fail if it doesn't exist
-systemctl disable lvm2-monitor.service || true
+systemctl list-unit-files lvm2-monitor.service &>/dev/null && systemctl disable lvm2-monitor.service || true
 
 # Set GroovyArcade boot screen
 plymouth-set-default-theme -R groovy
