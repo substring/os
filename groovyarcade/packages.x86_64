@@ -105,6 +105,8 @@ rxvt-unicode-terminfo
 smartmontools
 sudo
 syslinux
+limine
+liminedeploy-hook
 systemd-resolvconf
 terminus-font
 usb_modeswitch
