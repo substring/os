@@ -66,7 +66,8 @@ evtest
 ttf-hack
 #base OS
 amd-ucode
-amdvlk
+# amdvlk is out of arch, only available on AUR. Not maintained anymore by AMD
+#amdvlk
 arch-install-scripts
 b43-fwcutter
 base
