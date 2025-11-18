@@ -45,4 +45,4 @@ basic_opts="-p base -u arcade"
 /opt/gasetup/gasetup.sh $basic_opts -c groovymame
 
 # Remove the fallback initramfs
-rm /boot/*-fallback.img
+find /boot -name '*-fallback.img' -delete
